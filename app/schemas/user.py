@@ -1,23 +1,31 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, constr
 from typing import Optional
 
 class UserBase(BaseModel):
     email: EmailStr
-    full_name: str
+    first_name: str
+    middle_name: Optional[str] = None
+    last_name: str
+    mother_last_name: Optional[str] = None
+    store: Optional[str] = None
 
 class UserCreate(UserBase):
-    password: str
+    password: constr(min_length=8)
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
+    mother_last_name: Optional[str] = None
+    store: Optional[str] = None
     password: Optional[str] = None  # se encripta si cambia
-    role: Optional[str] = None
+    role: Optional[int] = None  # 1: admin, 2: emprendedor, 3: cliente
     is_active: Optional[bool] = None
 
 class UserOut(UserBase):
     id: int
-    role: str
+    role: int  # 1: admin, 2: emprendedor, 3: cliente
     is_active: bool
 
     class Config:

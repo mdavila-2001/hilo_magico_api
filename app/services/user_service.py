@@ -12,7 +12,11 @@ def create_user(db: Session, user: UserCreate):
     hashed_pw = get_password_hash(user.password)
     db_user = User(
         email=user.email,
-        full_name=user.full_name,
+        first_name=user.first_name,
+        middle_name=user.middle_name,
+        last_name=user.last_name,
+        mother_last_name=user.mother_last_name,
+        store=user.store,
         hashed_password=hashed_pw
     )
     db.add(db_user)
@@ -36,8 +40,16 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate):
 
     if user_data.email:
         user.email = user_data.email
-    if user_data.full_name:
-        user.full_name = user_data.full_name
+    if user_data.first_name:
+        user.first_name = user_data.first_name
+    if user_data.middle_name is not None:
+        user.middle_name = user_data.middle_name
+    if user_data.last_name:
+        user.last_name = user_data.last_name
+    if user_data.mother_last_name is not None:
+        user.mother_last_name = user_data.mother_last_name
+    if user_data.store is not None:
+        user.store = user_data.store
     if user_data.password:
         user.hashed_password = get_password_hash(user_data.password)
     if user_data.role:
