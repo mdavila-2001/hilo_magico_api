@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from uuid import UUID
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from passlib.context import CryptContext
@@ -17,14 +18,15 @@ def create_user(db: Session, user: UserCreate):
         last_name=user.last_name,
         mother_last_name=user.mother_last_name,
         store=user.store,
-        hashed_password=hashed_pw
+        hashed_password=hashed_pw,
+        role=user.role
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
-def get_user(db: Session, user_id: int):
+def get_user(db: Session, user_id: UUID):
     return db.query(User).filter(User.id == user_id).first()
 
 def get_user_by_email(db: Session, email: str):
@@ -33,7 +35,7 @@ def get_user_by_email(db: Session, email: str):
 def get_all_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(User).offset(skip).limit(limit).all()
 
-def update_user(db: Session, user_id: int, user_data: UserUpdate):
+def update_user(db: Session, user_id: UUID, user_data: UserUpdate):
     user = get_user(db, user_id)
     if not user:
         return None
@@ -52,8 +54,8 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate):
         user.store = user_data.store
     if user_data.password:
         user.hashed_password = get_password_hash(user_data.password)
-    if user_data.role:
-        user.role = user_data.role
+    if user_data.role is not None:
+        user.role = user_data.role if user_data.role else 3
     if user_data.is_active is not None:
         user.is_active = user_data.is_active
 
@@ -61,7 +63,7 @@ def update_user(db: Session, user_id: int, user_data: UserUpdate):
     db.refresh(user)
     return user
 
-def delete_user(db: Session, user_id: int):
+def delete_user(db: Session, user_id: UUID):
     user = get_user(db, user_id)
     if not user:
         return None

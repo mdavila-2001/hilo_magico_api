@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, constr
 from typing import Optional
+from uuid import UUID
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -11,6 +12,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: constr(min_length=8)
+    role: Optional[int] = 3  # 1: admin, 2: emprendedor, 3: cliente
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -24,7 +26,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class UserOut(UserBase):
-    id: int
+    id: UUID
     role: int  # 1: admin, 2: emprendedor, 3: cliente
     is_active: bool
 
