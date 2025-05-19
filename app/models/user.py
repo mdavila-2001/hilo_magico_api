@@ -1,7 +1,8 @@
-from sqlalchemy import Column, String, Boolean, Integer
+from sqlalchemy import Column, String, Boolean, Integer, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
+from datetime import datetime
 from app.db.session import Base
 from app.models.user_store import user_store
 
@@ -18,6 +19,9 @@ class User(Base):
     mother_last_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     role = Column(Integer, default=3)  # 1: admin, 2: emprendedor, 3: cliente
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
     
     # Relación many-to-many con Store
     stores = relationship("Store", secondary=user_store, back_populates="users")

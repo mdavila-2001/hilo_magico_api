@@ -74,8 +74,12 @@ async def delete_user(db: AsyncSession, user_id: UUID):
     if not user:
         return None
     
-    # Implementar borrado lógico actualizando is_active a False
-    query = update(User).where(User.id == user_id).values({"is_active": False})
+    # Implementar borrado lógico actualizando is_active a False y estableciendo deleted_at
+    from datetime import datetime
+    query = update(User).where(User.id == user_id).values({
+        "is_active": False,
+        "deleted_at": datetime.utcnow()
+    })
     await db.execute(query)
     await db.commit()
     return await get_user(db, user_id)

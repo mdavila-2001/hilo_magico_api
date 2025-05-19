@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, Boolean, Integer
+from sqlalchemy import Column, String, Boolean, Integer, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from app.db.session import Base
 from app.models.user_store import user_store
 
@@ -13,6 +14,9 @@ class Store(Base):
     address = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
     
     # Relación many-to-many con User
     users = relationship("User", secondary=user_store, back_populates="stores")
