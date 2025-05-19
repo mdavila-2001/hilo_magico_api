@@ -8,8 +8,8 @@ app = FastAPI(title="Hilo Mágico API", version="1.0.0")
 
 # CORS – permití conexión desde frontend Astro o localhost
 origins = [
-    "http://localhost:3000",  # Astro local
-    "http://127.0.0.1:3000",
+    "http://localhost:4321",  # Astro local
+    "http://127.0.0.1:4321",
     "*"  # (opcional para pruebas, restringir en producción)
 ]
 

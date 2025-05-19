@@ -1,15 +1,17 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 from uuid import UUID
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from passlib.context import CryptContext
+from typing import List, Optional
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_password_hash(password: str):
     return pwd_context.hash(password)
 
-def create_user(db: Session, user: UserCreate):
+async def create_user(db: AsyncSession, user: UserCreate):
     hashed_pw = get_password_hash(user.password)
     db_user = User(
         email=user.email,
@@ -22,51 +24,58 @@ def create_user(db: Session, user: UserCreate):
         role=user.role
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
-def get_user(db: Session, user_id: UUID):
-    return db.query(User).filter(User.id == user_id).first()
+async def get_user(db: AsyncSession, user_id: UUID, include_inactive: bool = False) -> Optional[User]:
+    query = select(User).filter(User.id == user_id)
+    if not include_inactive:
+        query = query.filter(User.is_active is True)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
 
-def get_user_by_email(db: Session, email: str):
-    return db.query(User).filter(User.email == email).first()
+async def get_user_by_email(db: AsyncSession, email: str, include_inactive: bool = False) -> Optional[User]:
+    query = select(User).filter(User.email == email)
+    if not include_inactive:
+        query = query.filter(User.is_active is True)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
 
-def get_all_users(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(User).offset(skip).limit(limit).all()
+async def get_all_users(db: AsyncSession, skip: int = 0, limit: int = 100, include_inactive: bool = False) -> List[User]:
+    query = select(User)
+    if not include_inactive:
+        query = query.filter(User.is_active is True)
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
 
-def update_user(db: Session, user_id: UUID, user_data: UserUpdate):
-    user = get_user(db, user_id)
+async def update_user(db: AsyncSession, user_id: UUID, user_data: UserUpdate) -> Optional[User]:
+    user = await get_user(db, user_id)
     if not user:
         return None
 
-    if user_data.email:
-        user.email = user_data.email
-    if user_data.first_name:
-        user.first_name = user_data.first_name
-    if user_data.middle_name is not None:
-        user.middle_name = user_data.middle_name
-    if user_data.last_name:
-        user.last_name = user_data.last_name
-    if user_data.mother_last_name is not None:
-        user.mother_last_name = user_data.mother_last_name
-    if user_data.store is not None:
-        user.store = user_data.store
+    update_data = user_data.dict(exclude_unset=True)
+    if not update_data:
+        return user
+
     if user_data.password:
-        user.hashed_password = get_password_hash(user_data.password)
-    if user_data.role is not None:
-        user.role = user_data.role if user_data.role else 3
-    if user_data.is_active is not None:
-        user.is_active = user_data.is_active
+        update_data["hashed_password"] = get_password_hash(user_data.password)
+        del update_data["password"]
 
-    db.commit()
-    db.refresh(user)
-    return user
+    query = update(User).where(User.id == user_id).values(update_data)
+    await db.execute(query)
+    await db.commit()
+    
+    return await get_user(db, user_id)
 
-def delete_user(db: Session, user_id: UUID):
-    user = get_user(db, user_id)
+async def delete_user(db: AsyncSession, user_id: UUID):
+    user = await get_user(db, user_id)
     if not user:
         return None
-    db.delete(user)
-    db.commit()
-    return user
+    
+    # Implementar borrado lógico actualizando is_active a False
+    query = update(User).where(User.id == user_id).values({"is_active": False})
+    await db.execute(query)
+    await db.commit()
+    return await get_user(db, user_id)
