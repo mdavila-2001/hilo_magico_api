@@ -4,7 +4,6 @@ sys.path.append('.')
 import asyncio
 from app.db.session import engine
 from app.models import user
-from app.models import store
 from app.db.session import Base
 
 async def create_tables():
