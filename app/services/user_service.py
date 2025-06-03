@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from passlib.context import CryptContext
@@ -50,9 +50,15 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
     await db.refresh(new_user)
     return new_user
 
+# 📄 Obtener todos los usuarios
+async def get_all_users(db: AsyncSession):
+    query = select(User).where(and_(User.deleted_at.is_(None), User.status is True)).order_by(User.created_at.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
 # 📄 Obtener usuario por ID
 async def get_user_by_id(db: AsyncSession, user_id):
-    result = await db.execute(select(User).filter(User.id == user_id, User.status == True))
+    result = await db.execute(select(User).filter(User.id == user_id, User.status is True))
     return result.scalar_one_or_none()
 
 # 🔄 Actualizar usuario (solo campos permitidos)
