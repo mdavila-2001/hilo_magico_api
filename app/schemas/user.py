@@ -125,33 +125,21 @@ class UserOut(BaseModel):
     
     @classmethod
     def from_orm(cls, obj):
-        # Construir el nombre completo
-        full_name_parts = [obj.first_name]
-        if obj.middle_name:
-            full_name_parts.append(obj.middle_name)
-        full_name_parts.append(obj.last_name)
-        if obj.mother_last_name:
-            full_name_parts.append(obj.mother_last_name)
-            
-        full_name = " ".join(full_name_parts)
-        
-        # Asegurarse de que las fechas sean serializables
-        created_at = obj.created_at.isoformat() if obj.created_at else None
-        updated_at = obj.updated_at.isoformat() if obj.updated_at else None
-        
-        return cls(
-            id=obj.id,
-            email=obj.email,
-            first_name=obj.first_name,
-            middle_name=obj.middle_name,
-            last_name=obj.last_name,
-            mother_last_name=obj.mother_last_name,
-            full_name=full_name,
-            is_active=obj.is_active,
-            role=obj.role.value if hasattr(obj.role, 'value') else str(obj.role),
-            created_at=created_at,
-            updated_at=updated_at
-        )
+        # Convertir el objeto a diccionario
+        data = {
+            'id': obj.id,
+            'email': obj.email,
+            'first_name': obj.first_name,
+            'middle_name': obj.middle_name,
+            'last_name': obj.last_name,
+            'mother_last_name': obj.mother_last_name,
+            'is_active': obj.is_active,
+            'role': obj.role.value if hasattr(obj.role, 'value') else str(obj.role),
+            'created_at': obj.created_at.isoformat() if obj.created_at else None,
+            'updated_at': obj.updated_at.isoformat() if obj.updated_at else None
+        }
+        # El validador se encargará de construir el full_name
+        return cls(**data)
     
     class Config:
         from_attributes = True
