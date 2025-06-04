@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
@@ -27,11 +28,6 @@ from app.schemas.user import (
 from app.schemas.response import APIResponse
 
 class UserService:
-    """
-    Service class for handling user-related operations.
-    Handles user creation, retrieval, updates, and authentication.
-    """
-    
     def __init__(self, db: AsyncSession):
         self.db = db
         self.logger = logging.getLogger(__name__)
@@ -121,32 +117,54 @@ class UserService:
         Raises:
             ConflictException: If a user with the email already exists
         """
-        # Check if user with this email already exists
-        existing_user = await self.get_user_by_email(user_data.email)
-        if existing_user:
-            raise ConflictException("A user with this email already exists")
-        
-        # Create new user
-        now = datetime.now(timezone.utc)
-        db_user = User(
-            email=user_data.email.lower(),
-            hashed_password=get_password_hash(user_data.password),
-            first_name=user_data.first_name,
-            middle_name=user_data.middle_name,
-            last_name=user_data.last_name,
-            mother_last_name=user_data.mother_last_name,
-            is_active=user_data.is_active,
-            is_superuser=user_data.is_superuser,
-            role=user_data.role,
-            created_at=now,
-            updated_at=now
-        )
-        
-        self.db.add(db_user)
-        await self.db.commit()
-        await self.db.refresh(db_user)
-        
-        return db_user
+        try:
+            self.logger.info(f"Iniciando creación de usuario: {user_data.email}")
+            
+            # Check if user with this email already exists
+            self.logger.info("Verificando si el correo ya existe...")
+            existing_user = await self.get_user_by_email(user_data.email)
+            if existing_user:
+                self.logger.warning(f"Intento de crear usuario con correo existente: {user_data.email}")
+                raise ConflictException("A user with this email already exists")
+            
+            # Create new user
+            self.logger.info("Creando objeto de usuario...")
+            now = datetime.now(timezone.utc)
+            hashed_pwd = get_password_hash(user_data.password)
+            
+            self.logger.info("Hasheando contraseña...")
+            
+            db_user = User(
+                email=user_data.email.lower(),
+                hashed_password=hashed_pwd,
+                first_name=user_data.first_name,
+                middle_name=user_data.middle_name,
+                last_name=user_data.last_name,
+                mother_last_name=user_data.mother_last_name,
+                is_active=user_data.is_active if hasattr(user_data, 'is_active') else True,
+                is_superuser=user_data.is_superuser if hasattr(user_data, 'is_superuser') else False,
+                role=user_data.role if hasattr(user_data, 'role') else UserRole.CUSTOMER,
+                created_at=now,
+                updated_at=now
+            )
+            
+            self.logger.info("Agregando usuario a la sesión...")
+            self.db.add(db_user)
+            
+            self.logger.info("Realizando commit...")
+            await self.db.commit()
+            
+            self.logger.info("Actualizando objeto de usuario...")
+            await self.db.refresh(db_user)
+            
+            self.logger.info(f"Usuario creado exitosamente con ID: {db_user.id}")
+            return db_user
+            
+        except Exception as e:
+            self.logger.error(f"Error al crear usuario: {str(e)}", exc_info=True)
+            # Rollback en caso de error
+            await self.db.rollback()
+            raise
     
     async def update_user(
         self, 

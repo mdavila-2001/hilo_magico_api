@@ -1,10 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 from datetime import datetime
+from uuid import UUID as UUID4
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -17,32 +18,41 @@ async def get_user_by_email(db: AsyncSession, email: str):
     result = await db.execute(select(User).filter(User.email == email))
     return result.scalar_one_or_none()
 
-# 🔍 Verifica si el CI ya existe
-async def get_user_by_ci(db: AsyncSession, ci: str):
-    result = await db.execute(select(User).filter(User.ci == ci))
+# 🔍 Verifica si el usuario existe por ID
+async def get_user_by_id(db: AsyncSession, user_id: UUID4 | str):
+    if isinstance(user_id, str):
+        try:
+            user_id = UUID4(user_id)
+        except ValueError:
+            return None
+    result = await db.execute(select(User).filter(User.id == user_id, User.is_active == True))
     return result.scalar_one_or_none()
 
 # ✅ Crear usuario nuevo
 async def create_user(db: AsyncSession, user_data: UserCreate):
-    # Validación duplicados
-    if await get_user_by_email(db, user_data.email):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Correo ya registrado")
-    
-    if await get_user_by_ci(db, user_data.ci):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CI ya registrado")
+    # Validación de duplicados
+    existing_user = await get_user_by_email(db, user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ya existe un usuario con este correo electrónico"
+        )
 
     hashed_password = get_password_hash(user_data.password)
+    
+    # Usar el rol proporcionado o USER por defecto
+    role = user_data.role if hasattr(user_data, 'role') else UserRole.USER
 
     new_user = User(
         email=user_data.email,
-        ci=user_data.ci,
         first_name=user_data.first_name,
-        middle_name=user_data.middle_name,
+        middle_name=user_data.middle_name if hasattr(user_data, 'middle_name') else None,
         last_name=user_data.last_name,
-        mother_last_name=user_data.mother_last_name,
-        phone=user_data.phone,
-        role_id=user_data.role_id or 3,
+        mother_last_name=user_data.mother_last_name if hasattr(user_data, 'mother_last_name') else None,
         hashed_password=hashed_password,
+        is_active=True,
+        is_superuser=role == UserRole.ADMIN,
+        role=role
     )
 
     db.add(new_user)
@@ -50,38 +60,69 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
     await db.refresh(new_user)
     return new_user
 
-# 📄 Obtener todos los usuarios
+# 📄 Obtener todos los usuarios (activos)
 async def get_all_users(db: AsyncSession):
-    query = select(User).where(and_(User.deleted_at.is_(None), User.status is True)).order_by(User.created_at.desc())
+    query = select(User).where(
+        User.is_active == True
+    ).order_by(User.created_at.desc())
     result = await db.execute(query)
     return result.scalars().all()
 
-# 📄 Obtener usuario por ID
-async def get_user_by_id(db: AsyncSession, user_id):
-    result = await db.execute(select(User).filter(User.id == user_id, User.status is True))
+# 📄 Obtener usuario por ID (solo activos)
+async def get_user_by_id(db: AsyncSession, user_id: UUID4 | str):
+    if isinstance(user_id, str):
+        try:
+            user_id = UUID4(user_id)
+        except ValueError:
+            return None
+    result = await db.execute(
+        select(User).filter(
+            User.id == user_id,
+            User.is_active == True
+        )
+    )
     return result.scalar_one_or_none()
 
 # 🔄 Actualizar usuario (solo campos permitidos)
-async def update_user(db: AsyncSession, user_id, update_data: UserUpdate):
+async def update_user(db: AsyncSession, user_id: UUID4 | str, update_data: UserUpdate):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
 
-    for field, value in update_data.dict(exclude_unset=True).items():
-        setattr(user, field, value)
-
+    update_dict = update_data.dict(exclude_unset=True)
+    
+    # Actualizar solo los campos permitidos
+    allowed_fields = [
+        'first_name', 'middle_name', 'last_name', 'mother_last_name',
+        'is_active', 'role'
+    ]
+    
+    for field in allowed_fields:
+        if field in update_dict:
+            setattr(user, field, update_dict[field])
+    
+    # Si se actualiza el rol, actualizar también is_superuser
+    if 'role' in update_dict:
+        user.is_superuser = (update_dict['role'] == UserRole.ADMIN)
+    
     user.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(user)
     return user
 
 # ❌ Eliminación lógica
-async def delete_user(db: AsyncSession, user_id):
+async def delete_user(db: AsyncSession, user_id: UUID4 | str):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
 
-    user.status = False
+    user.is_active = False
     user.deleted_at = datetime.utcnow()
     await db.commit()
-    return {"message": "Usuario eliminado (lógicamente)"}
+    return {"message": "Usuario desactivado exitosamente"}

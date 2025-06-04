@@ -9,7 +9,7 @@ from app.db.session import Base
 class Product(Base):
     """Modelo SQLAlchemy para la entidad Producto"""
     __tablename__ = 'products'
-    __table_args__ = {'schema': 'public'}
+    __table_args__ = {'schema': 'development'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     name = Column(String(100), nullable=False, index=True)
@@ -18,16 +18,16 @@ class Product(Base):
     price = Column(Float, nullable=False)
     stock = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    deleted_at = Column(DateTime, nullable=True)
     
     # Clave foránea
-    store_id = Column(UUID(as_uuid=True), ForeignKey('public.stores.id'), nullable=False, index=True)
+    store_id = Column(UUID(as_uuid=True), ForeignKey('development.stores.id'), nullable=False, index=True)
 
-    # Relaciones
-    store = relationship('Store', back_populates='products')
-    order_items = relationship('OrderItem', back_populates='product')
+    # Relaciones comentadas temporalmente para simplificar
+    # store = relationship('Store', back_populates='products')
+    # order_items = relationship('OrderItem', back_populates='product')
 
     def __repr__(self):
         return f"<Product(id={self.id}, name='{self.name}', price={self.price})>"

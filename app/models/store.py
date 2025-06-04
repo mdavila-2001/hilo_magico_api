@@ -9,7 +9,7 @@ from app.db.session import Base
 class Store(Base):
     """Modelo SQLAlchemy para la entidad Tienda"""
     __tablename__ = 'stores'
-    __table_args__ = {'schema': 'public'}
+    __table_args__ = {'schema': 'development'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     name = Column(String(100), nullable=False, index=True)
@@ -18,20 +18,20 @@ class Store(Base):
     phone = Column(String(20), nullable=False)
     email = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    deleted_at = Column(DateTime, nullable=True)
 
-    # Relaciones
-    user_associations = relationship('UserStoreAssociation', back_populates='store')
-    users = relationship(
-        'User',
-        secondary='public.user_store_association',
-        back_populates='stores',
-        viewonly=True
-    )
-    products = relationship('Product', back_populates='store')
-    orders = relationship('Order', back_populates='store')
+    # Relaciones comentadas temporalmente para simplificar
+    # user_associations = relationship('UserStoreAssociation', back_populates='store')
+    # users = relationship(
+    #     'User',
+    #     secondary='development.user_store_association',
+    #     back_populates='stores',
+    #     viewonly=True
+    # )
+    # products = relationship('Product', back_populates='store')
+    # orders = relationship('Order', back_populates='store')
 
     def __repr__(self):
         return f"<Store(id={self.id}, name='{self.name}')>"

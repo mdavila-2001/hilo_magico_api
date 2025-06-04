@@ -26,7 +26,7 @@ class APIResponse(GenericModel, Generic[T]):
         json_encoders = {
             # Agregar codificadores personalizados si es necesario
         }
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "data": None,
                 "success": True,

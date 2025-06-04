@@ -10,7 +10,7 @@ from app.schemas.user import UserRole
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "development"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
@@ -25,19 +25,19 @@ class User(Base):
     is_superuser = Column(Boolean, default=False)
     role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
     
-    # Auditoría
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    # Timestamps - Using timezone-naive datetimes for compatibility
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, onupdate=func.now())
     deleted_at = Column(DateTime, nullable=True)
     
-    # Relación muchos a muchos con Store a través de la tabla de asociación
-    store_associations = relationship('UserStoreAssociation', back_populates='user')
-    stores = relationship(
-        'Store',
-        secondary='public.user_store_association',
-        back_populates='users',
-        viewonly=True
-    )
+    # Relaciones comentadas temporalmente para simplificar
+    # store_associations = relationship('UserStoreAssociation', back_populates='user')
+    # stores = relationship(
+    #     'Store',
+    #     secondary='development.user_store_association',
+    #     back_populates='users',
+    #     viewonly=True
+    # )
 
     def to_dict(self, include_stores: bool = False) -> dict:
         """
@@ -65,16 +65,17 @@ class User(Base):
             'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None
         }
         
-        if include_stores:
-            result['stores'] = [{
-                'id': str(store.id),
-                'name': store.name,
-                'role': next(
-                    (assoc.role.value for assoc in self.store_associations 
-                     if assoc.store_id == store.id and assoc.is_active),
-                    None
-                )
-            } for store in self.stores]
+        # La inclusión de tiendas ha sido temporalmente deshabilitada
+        # if include_stores:
+        #     result['stores'] = [{
+        #         'id': str(store.id),
+        #         'name': store.name,
+        #         'role': next(
+        #             (assoc.role.value for assoc in self.store_associations 
+        #              if assoc.store_id == store.id and assoc.is_active),
+        #             None
+        #         )
+        #     } for store in self.stores]
             
         return result
         

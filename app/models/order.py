@@ -18,7 +18,7 @@ class OrderStatus(str, PyEnum):
 class Order(Base):
     """Modelo SQLAlchemy para la entidad Orden"""
     __tablename__ = 'orders'
-    __table_args__ = {'schema': 'public'}
+    __table_args__ = {'schema': 'development'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     order_number = Column(String(20), unique=True, nullable=False, index=True)
@@ -33,20 +33,20 @@ class Order(Base):
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     notes = Column(String(500), nullable=True)
     is_paid = Column(Boolean, default=False, nullable=False)
-    paid_at = Column(DateTime(timezone=True), nullable=True)
+    paid_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    deleted_at = Column(DateTime, nullable=True)
     
     # Claves foráneas
-    store_id = Column(UUID(as_uuid=True), ForeignKey('public.stores.id'), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), nullable=True, index=True)
+    store_id = Column(UUID(as_uuid=True), ForeignKey('development.stores.id'), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('development.users.id'), nullable=True, index=True)
 
-    # Relaciones
-    store = relationship('Store', back_populates='orders')
-    user = relationship('User')
-    items = relationship('OrderItem', back_populates='order', cascade='all, delete-orphan')
+    # Relaciones comentadas temporalmente para simplificar
+    # store = relationship('Store', back_populates='orders')
+    # user = relationship('User')
+    # items = relationship('OrderItem', back_populates='order', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<Order(id={self.id}, order_number='{self.order_number}', status='{self.status}')>"
@@ -79,21 +79,21 @@ class Order(Base):
 class OrderItem(Base):
     """Modelo SQLAlchemy para los ítems de una orden"""
     __tablename__ = 'order_items'
-    __table_args__ = {'schema': 'public'}
+    __table_args__ = {'schema': 'development'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Float, nullable=False)
     subtotal = Column(Float, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now())
     
     # Claves foráneas
-    order_id = Column(UUID(as_uuid=True), ForeignKey('public.orders.id'), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey('public.products.id'), nullable=False, index=True)
+    order_id = Column(UUID(as_uuid=True), ForeignKey('development.orders.id'), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey('development.products.id'), nullable=False, index=True)
 
-    # Relaciones
-    order = relationship('Order', back_populates='items')
-    product = relationship('Product', back_populates='order_items')
+    # Relaciones comentadas temporalmente para simplificar
+    # order = relationship('Order', back_populates='items')
+    # product = relationship('Product', back_populates='order_items')
 
     def __repr__(self):
         return f"<OrderItem(id={self.id}, product_id='{self.product_id}', quantity={self.quantity})>"

@@ -38,7 +38,7 @@ class StoreInDB(StoreBase):
     deleted_at: Optional[datetime] = Field(None, description="Fecha de eliminación lógica")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
@@ -69,7 +69,7 @@ class UserStoreInDB(UserStoreBase):
     deleted_at: Optional[datetime] = Field(None, description="Fecha de eliminación lógica")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
