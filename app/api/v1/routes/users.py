@@ -76,21 +76,41 @@ async def create_user(
         }
         
         # Crear un objeto UserOut a partir del diccionario
-        user_out = UserOut(**user_dict)
-        
-        # Crear respuesta exitosa
-        return APIResponse[UserOut](
-            data=user_out,
-            message="Usuario creado exitosamente",
-            status_code=status.HTTP_201_CREATED
-        )
+        try:
+            user_out = UserOut(**user_dict)
+            
+            # Crear respuesta exitosa
+            return {
+                "data": user_out.model_dump(),
+                "message": "Usuario creado exitosamente",
+                "success": True,
+                "status_code": status.HTTP_201_CREATED
+            }
+            
+        except Exception as e:
+            logger.error(f"Error al serializar respuesta: {str(e)}")
+            # Si hay error en la serialización, devolver solo datos básicos
+            return {
+                "data": {
+                    "id": str(user_dict.get('id')),
+                    "email": user_dict.get('email'),
+                    "first_name": user_dict.get('first_name'),
+                    "last_name": user_dict.get('last_name'),
+                    "is_active": user_dict.get('is_active')
+                },
+                "message": "Usuario creado exitosamente (respuesta simplificada)",
+                "success": True,
+                "status_code": status.HTTP_201_CREATED
+            }
         
     except HTTPException as http_exc:
         # Re-lanzar excepciones HTTP específicas
+        logger.error(f"Error HTTP al crear usuario: {str(http_exc)}")
         raise http_exc
+        
     except Exception as e:
         # Manejar otros errores inesperados
-        logger.error(f"Error al crear usuario: {str(e)}")
+        logger.error(f"Error inesperado al crear usuario: {str(e)}")
         if "duplicate key value" in str(e).lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -104,7 +124,7 @@ async def create_user(
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error interno del servidor al crear el usuario: {str(e)}"
+                detail="Error interno del servidor al crear el usuario"
             )
 
 # Obtener todos los usuarios
