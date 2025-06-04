@@ -13,7 +13,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 # Importar routers
-from app.api.v1.routes import users, stores
+from app.api.v1.routes import users, stores, auth
 
 def create_application() -> FastAPI:
     # Crear aplicación FastAPI
@@ -26,11 +26,9 @@ def create_application() -> FastAPI:
     )
 
     # Configurar CORS
-    origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS else []
-    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -55,7 +53,8 @@ def create_application() -> FastAPI:
             "docs": "/api/docs" if settings.ENVIRONMENT != "production" else None,
         }
 
-    # Incluir rutas de la API
+    # Incluir routers
+    app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticación"])
     app.include_router(users.router, prefix="/api/v1/users", tags=["Usuarios"])
     app.include_router(stores.router, prefix="/api/v1/stores", tags=["Tiendas"])
     

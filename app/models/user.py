@@ -14,7 +14,10 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
-    full_name = Column(String, nullable=True)
+    first_name = Column(String(50), nullable=False)
+    middle_name = Column(String(50), nullable=True)
+    last_name = Column(String(50), nullable=False)
+    mother_last_name = Column(String(50), nullable=True)
     hashed_password = Column(String, nullable=False)
     
     # Campos de autenticación y autorización
@@ -27,11 +30,11 @@ class User(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime, nullable=True)
     
-    # Relaciones
-    store_associations = relationship('UserStore', back_populates='user')
+    # Relación muchos a muchos con Store a través de la tabla de asociación
+    store_associations = relationship('UserStoreAssociation', back_populates='user')
     stores = relationship(
         'Store',
-        secondary='public.user_store',
+        secondary='public.user_store_association',
         back_populates='users',
         viewonly=True
     )
@@ -49,7 +52,11 @@ class User(Base):
         result = {
             'id': str(self.id),
             'email': self.email,
-            'full_name': self.full_name,
+            'first_name': self.first_name,
+            'middle_name': self.middle_name,
+            'last_name': self.last_name,
+            'mother_last_name': self.mother_last_name,
+            'full_name': f"{self.first_name} {self.middle_name or ''} {self.last_name} {self.mother_last_name or ''}".replace('  ', ' ').strip(),
             'is_active': self.is_active,
             'is_superuser': self.is_superuser,
             'role': self.role.value if self.role else None,

@@ -1,48 +1,145 @@
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import or_
-from passlib.context import CryptContext
+from sqlalchemy.orm import selectinload
 
-from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
+from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.exceptions import (
+    BadRequestException,
+    NotFoundException,
+    UnauthorizedException,
+    ForbiddenException,
+    ConflictException
+)
+from app.models.user import User
+from app.schemas.user import (
+    UserRole,
+    UserCreate,
+    UserUpdate,
+    UserInDB,
+    UserOut
+)
+from app.schemas.response import APIResponse
 
 class UserService:
+    """
+    Service class for handling user-related operations.
+    Handles user creation, retrieval, updates, and authentication.
+    """
+    
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.logger = logging.getLogger(__name__)
     
-    async def get_user_by_id(self, user_id: str) -> Optional[User]:
-        """Obtiene un usuario por su ID"""
-        result = await self.db.execute(
-            select(User).where(User.id == user_id)
-        )
-        return result.scalars().first()
+    async def authenticate(self, email: str, password: str) -> Optional[User]:
+        """
+        Authenticate a user with email and password.
+        
+        Args:
+            email: User's email
+            password: Plain text password
+            
+        Returns:
+            User: The authenticated user if successful, None otherwise
+        """
+        try:
+            user = await self.get_by_email(email=email)
+            
+            if not user:
+                self.logger.warning(f"Login attempt failed: User with email {email} not found")
+                return None
+                
+            if not verify_password(password, user.hashed_password):
+                self.logger.warning(f"Login attempt failed: Invalid password for user {email}")
+                return None
+                
+            if not user.is_active:
+                self.logger.warning(f"Login attempt failed: User {email} is inactive")
+                return None
+                
+            return user
+            
+        except Exception as e:
+            self.logger.error(f"Error authenticating user {email}: {str(e)}")
+            return None
+
+    async def get_user_by_id(self, user_id: Union[UUID, str]) -> Optional[User]:
+        """
+        Retrieve a user by their ID.
+        
+        Args:
+            user_id: The UUID of the user to retrieve (as string or UUID object)
+            
+        Returns:
+            Optional[User]: The user if found, None otherwise
+        """
+        try:
+            user_uuid = UUID(str(user_id)) if isinstance(user_id, str) else user_id
+            result = await self.db.execute(
+                select(User).where(User.id == user_uuid, User.deleted_at.is_(None))
+            )
+            return result.scalars().first()
+        except ValueError:
+            raise BadRequestException("Invalid user ID format")
     
     async def get_user_by_email(self, email: str) -> Optional[User]:
-        """Obtiene un usuario por su email"""
+        """
+        Retrieve a user by their email address.
+        
+        Args:
+            email: The email address to search for
+            
+        Returns:
+            Optional[User]: The user if found, None otherwise
+        """
+        if not email:
+            raise BadRequestException("Email is required")
+            
         result = await self.db.execute(
-            select(User).where(User.email == email)
+            select(User).where(
+                User.email == email.lower(),
+                User.deleted_at.is_(None)
+            )
         )
         return result.scalars().first()
     
-    async def create_user(self, user_in: UserCreate) -> User:
-        """Crea un nuevo usuario"""
-        # Verificar si el usuario ya existe
-        existing_user = await self.get_user_by_email(user_in.email)
-        if existing_user:
-            raise ValueError("El correo electrónico ya está registrado")
+    async def create_user(self, user_data: UserCreate) -> User:
+        """
+        Create a new user in the system.
         
-        # Crear el usuario
+        Args:
+            user_data: The user data for the new user
+            
+        Returns:
+            User: The newly created user
+            
+        Raises:
+            ConflictException: If a user with the email already exists
+        """
+        # Check if user with this email already exists
+        existing_user = await self.get_user_by_email(user_data.email)
+        if existing_user:
+            raise ConflictException("A user with this email already exists")
+        
+        # Create new user
+        now = datetime.now(timezone.utc)
         db_user = User(
-            email=user_in.email,
-            hashed_password=get_password_hash(user_in.password),
-            full_name=user_in.full_name,
-            is_active=user_in.is_active if user_in.is_active is not None else True,
-            is_superuser=user_in.is_superuser if user_in.is_superuser is not None else False,
+            email=user_data.email.lower(),
+            hashed_password=get_password_hash(user_data.password),
+            first_name=user_data.first_name,
+            middle_name=user_data.middle_name,
+            last_name=user_data.last_name,
+            mother_last_name=user_data.mother_last_name,
+            is_active=user_data.is_active,
+            is_superuser=user_data.is_superuser,
+            role=user_data.role,
+            created_at=now,
+            updated_at=now
         )
         
         self.db.add(db_user)
@@ -53,79 +150,204 @@ class UserService:
     
     async def update_user(
         self, 
-        user_id: str, 
-        user_in: UserUpdate,
+        user_id: Union[UUID, str],
+        user_data: UserUpdate,
         current_user: User
-    ) -> Optional[User]:
-        """Actualiza un usuario existente"""
-        # Solo el propio usuario o un superusuario puede actualizar
-        if str(current_user.id) != user_id and not current_user.is_superuser:
-            raise PermissionError("No tiene permisos para actualizar este usuario")
+    ) -> User:
+        """
+        Update an existing user.
         
+        Args:
+            user_id: The ID of the user to update
+            user_data: The updated user data
+            current_user: The currently authenticated user
+            
+        Returns:
+            User: The updated user
+            
+        Raises:
+            NotFoundException: If the user is not found
+            ForbiddenException: If the current user doesn't have permission
+        """
+        # Only the user themselves or an admin can update
         db_user = await self.get_user_by_id(user_id)
         if not db_user:
-            return None
+            raise NotFoundException("User not found")
+            
+        if str(current_user.id) != str(user_id) and not current_user.is_superuser:
+            raise ForbiddenException("You don't have permission to update this user")
         
-        update_data = user_in.dict(exclude_unset=True)
+        # Only admins can update certain fields
+        if not current_user.is_superuser:
+            if user_data.role is not None and user_data.role != db_user.role:
+                raise ForbiddenException("You can't change user roles")
+            if user_data.is_superuser is not None and user_data.is_superuser != db_user.is_superuser:
+                raise ForbiddenException("You can't change superuser status")
         
-        # Si se está actualizando la contraseña, hashearla
+        update_data = user_data.dict(exclude_unset=True)
+        
+        # Handle password update
         if "password" in update_data:
-            hashed_password = get_password_hash(update_data["password"])
-            del update_data["password"]
-            update_data["hashed_password"] = hashed_password
+            update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
         
-        # Actualizar campos
+        # Update fields
         for field, value in update_data.items():
-            setattr(db_user, field, value)
+            # Skip fields that shouldn't be updated directly
+            if field in ['password', 'email']:
+                continue
+                
+            # Special handling for name fields
+            if field == 'first_name':
+                db_user.first_name = value
+            elif field == 'middle_name':
+                db_user.middle_name = value
+            elif field == 'last_name':
+                db_user.last_name = value
+            elif field == 'mother_last_name':
+                db_user.mother_last_name = value
+            # Handle other fields normally
+            elif hasattr(db_user, field):
+                setattr(db_user, field, value)
+        
+        db_user.updated_at = datetime.now(timezone.utc)
         
         await self.db.commit()
         await self.db.refresh(db_user)
         
         return db_user
     
-    async def authenticate(self, email: str, password: str) -> Optional[User]:
-        """Autentica un usuario con email y contraseña"""
+    async def authenticate(self, email: str, password: str) -> User:
+        """
+        Authenticate a user with email and password.
+        
+        Args:
+            email: The user's email
+            password: The user's password
+            
+        Returns:
+            User: The authenticated user
+            
+        Raises:
+            UnauthorizedException: If authentication fails
+        """
         user = await self.get_user_by_email(email)
-        if not user:
-            return None
+        if not user or not user.hashed_password:
+            raise UnauthorizedException("Incorrect email or password")
+            
+        if not user.is_active:
+            raise UnauthorizedException("This account is inactive")
+            
         if not verify_password(password, user.hashed_password):
-            return None
+            raise UnauthorizedException("Incorrect email or password")
+            
         return user
     
     async def get_users(
-        self, 
-        skip: int = 0, 
+        self,
+        skip: int = 0,
         limit: int = 100,
-        current_user: Optional[User] = None
+        current_user: Optional[User] = None,
+        filters: Optional[Dict[str, Any]] = None
     ) -> List[User]:
-        """Obtiene una lista de usuarios"""
-        # Solo los superusuarios pueden ver todos los usuarios
-        if current_user and not current_user.is_superuser:
-            raise PermissionError("No tiene permisos para ver la lista de usuarios")
+        """
+        Get a list of users with optional filtering.
         
-        result = await self.db.execute(
-            select(User)
-            .offset(skip)
-            .limit(limit)
-        )
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            current_user: The currently authenticated user
+            filters: Optional filters to apply
+            
+        Returns:
+            List[User]: List of users
+            
+        Raises:
+            ForbiddenException: If the user doesn't have permission
+        """
+        # Only admins can list all users
+        if current_user and not current_user.is_superuser:
+            raise ForbiddenException("You don't have permission to list users")
+        
+        query = select(User).where(User.deleted_at.is_(None))
+        
+        # Apply filters if provided
+        if filters:
+            filter_conditions = []
+            for field, value in filters.items():
+                if hasattr(User, field):
+                    filter_conditions.append(getattr(User, field) == value)
+            if filter_conditions:
+                query = query.where(and_(*filter_conditions))
+        
+        # Apply pagination
+        query = query.offset(skip).limit(limit).order_by(User.created_at.desc())
+        
+        result = await self.db.execute(query)
         return result.scalars().all()
     
     async def delete_user(
-        self, 
-        user_id: str, 
-        current_user: User
+        self,
+        user_id: Union[UUID, str],
+        current_user: User,
+        hard_delete: bool = False
     ) -> bool:
-        """Elimina un usuario (eliminación lógica)"""
-        # Solo el propio usuario o un superusuario puede eliminarse
-        if str(current_user.id) != user_id and not current_user.is_superuser:
-            raise PermissionError("No tiene permisos para eliminar este usuario")
+        """
+        Delete a user (soft delete by default).
         
+        Args:
+            user_id: The ID of the user to delete
+            current_user: The currently authenticated user
+            hard_delete: If True, permanently delete the user
+            
+        Returns:
+            bool: True if successful, False otherwise
+            
+        Raises:
+            ForbiddenException: If the user doesn't have permission
+            NotFoundException: If the user is not found
+        """
         db_user = await self.get_user_by_id(user_id)
         if not db_user:
-            return False
-        
-        # Eliminación lógica
-        db_user.is_active = False
+            raise NotFoundException("User not found")
+            
+        # Only the user themselves or an admin can delete
+        if str(current_user.id) != str(user_id) and not current_user.is_superuser:
+            raise ForbiddenException("You don't have permission to delete this user")
+            
+        # Prevent admins from being deleted by non-superusers
+        if db_user.is_superuser and not current_user.is_superuser:
+            raise ForbiddenException("Cannot delete admin users")
+            
+        if hard_delete and current_user.is_superuser:
+            # Hard delete (permanent removal)
+            await self.db.delete(db_user)
+        else:
+            # Soft delete (mark as deleted)
+            db_user.is_active = False
+            db_user.deleted_at = datetime.now(timezone.utc)
+            
         await self.db.commit()
-        
         return True
+    
+    async def count_users(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Count the number of users matching optional filters.
+        
+        Args:
+            filters: Optional filters to apply
+            
+        Returns:
+            int: The count of matching users
+        """
+        query = select(User).where(User.deleted_at.is_(None))
+        
+        if filters:
+            filter_conditions = []
+            for field, value in filters.items():
+                if hasattr(User, field):
+                    filter_conditions.append(getattr(User, field) == value)
+            if filter_conditions:
+                query = query.where(and_(*filter_conditions))
+                
+        result = await self.db.execute(select([func.count()]).select_from(query.subquery()))
+        return result.scalar_one()

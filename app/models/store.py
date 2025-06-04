@@ -23,7 +23,7 @@ class Store(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relaciones
-    user_associations = relationship('UserStore', back_populates='store')
+    user_associations = relationship('UserStoreAssociation', back_populates='store')
     users = relationship(
         'User',
         secondary='public.user_store_association',

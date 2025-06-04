@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, TypeVar, Generic
 from pydantic import BaseModel, Field, EmailStr, UUID4
-from app.schemas.response import ResponseSchema
+from app.schemas.response import APIResponse
+
+# Definir tipo genérico para respuestas
+T = TypeVar('T')
 
 # Esquemas para Tienda (Store)
 
@@ -72,18 +75,18 @@ class UserStoreInDB(UserStoreBase):
         }
 
 # Esquemas para respuestas de la API
-class StoreResponse(ResponseSchema):
+class StoreResponse(APIResponse[StoreInDB]):
     """Esquema de respuesta para operaciones con tiendas"""
-    data: Optional[StoreInDB] = None
+    pass
 
-class StoreListResponse(ResponseSchema):
+class StoreListResponse(APIResponse[List[StoreInDB]]):
     """Esquema de respuesta para listados de tiendas"""
-    data: List[StoreInDB] = []
+    pass
 
-class UserStoreResponse(ResponseSchema):
+class UserStoreResponse(APIResponse[UserStoreInDB]):
     """Esquema de respuesta para operaciones con relaciones Usuario-Tienda"""
-    data: Optional[UserStoreInDB] = None
+    pass
 
-class UserStoreListResponse(ResponseSchema):
+class UserStoreListResponse(APIResponse[List[UserStoreInDB]]):
     """Esquema de respuesta para listados de relaciones Usuario-Tienda"""
-    data: List[UserStoreInDB] = []
+    pass

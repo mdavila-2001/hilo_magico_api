@@ -7,7 +7,7 @@ from app.schemas.response import APIResponse
 from app.db.session import get_db
 from app.services.user import UserService
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(tags=["Usuarios"])
 
 # 🟢 Crear usuario
 @router.post(

@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import (
-    authenticate_user,
     create_access_token,
     create_refresh_token,
     get_current_active_user,
@@ -16,10 +15,10 @@ from app.core.security import (
 from app.db.session import get_db
 from app.schemas.response import APIResponse
 from app.schemas.token import Token, TokenData
-from app.schemas.user import User, UserCreate, UserInDB, UserOut
+from app.schemas.user import UserBase, UserCreate, UserInDB, UserOut
 from app.services.user import UserService
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["Autenticación"])
 
 
 @router.post(
@@ -38,7 +37,8 @@ async def login_for_access_token(
     - **username**: Correo electrónico del usuario
     - **password**: Contraseña del usuario
     """
-    user = await authenticate_user(db, form_data.username, form_data.password)
+    user_service = UserService(db)
+    user = await user_service.authenticate(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -148,7 +148,7 @@ async def register_user(
     description="Obtiene la información del usuario autenticado.",
 )
 async def read_users_me(
-    current_user: User = Depends(get_current_active_user),
+    current_user: UserOut = Depends(get_current_active_user),
 ) -> APIResponse[UserOut]:
     """
     Obtiene la información del usuario autenticado.
@@ -156,7 +156,7 @@ async def read_users_me(
     Devuelve los datos del usuario actualmente autenticado.
     """
     return APIResponse[UserOut](
-        data=UserOut.from_orm(current_user),
+        data=current_user,
         message="Información del usuario obtenida exitosamente",
     )
 
@@ -170,7 +170,7 @@ async def read_users_me(
 async def change_password(
     current_password: str,
     new_password: str,
-    current_user: User = Depends(get_current_active_user),
+    current_user: UserOut = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[Dict[str, Any]]:
     """

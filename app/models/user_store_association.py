@@ -1,9 +1,9 @@
+import enum
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, func, Enum
+from sqlalchemy import Column, ForeignKey, Enum as SQLEnum, Boolean, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
-import enum
 
 from app.db.session import Base
 
@@ -15,15 +15,15 @@ class UserRole(str, enum.Enum):
     STAFF = 'staff'     # Personal de la tienda
     VIEWER = 'viewer'   # Solo lectura
 
-class UserStore(Base):
-    """Modelo SQLAlchemy para la relación Usuario-Tienda"""
-    __tablename__ = 'user_store'
+class UserStoreAssociation(Base):
+    """Modelo para la relación muchos a muchos entre User y Store"""
+    __tablename__ = 'user_store_association'
     __table_args__ = {'schema': 'public'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), nullable=False, index=True)
-    store_id = Column(UUID(as_uuid=True), ForeignKey('public.stores.id'), nullable=False, index=True)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.STAFF)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), index=True, nullable=False)
+    store_id = Column(UUID(as_uuid=True), ForeignKey('public.stores.id'), index=True, nullable=False)
+    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.STAFF)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -34,7 +34,7 @@ class UserStore(Base):
     store = relationship('Store', back_populates='user_associations')
 
     def __repr__(self):
-        return f"<UserStore(user_id={self.user_id}, store_id={self.store_id}, role='{self.role}')>"
+        return f"<UserStoreAssociation(user_id={self.user_id}, store_id={self.store_id}, role='{self.role}')>"
 
     def to_dict(self):
         return {
@@ -47,13 +47,3 @@ class UserStore(Base):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None
         }
-
-# Tabla de asociación para la relación muchos a muchos entre User y Store
-# Esta tabla es utilizada por SQLAlchemy para la relación many-to-many
-user_store_association = Table(
-    'user_store_association',
-    Base.metadata,
-    Column('user_id', UUID(as_uuid=True), ForeignKey('public.users.id'), primary_key=True),
-    Column('store_id', UUID(as_uuid=True), ForeignKey('public.stores.id'), primary_key=True),
-    schema='public'
-)
