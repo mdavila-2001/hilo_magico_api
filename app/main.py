@@ -13,7 +13,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 # Importar routers
-from app.api.v1.routes import users
+from app.api.v1.routes import users, stores
 
 def create_application() -> FastAPI:
     # Crear aplicación FastAPI
@@ -56,7 +56,8 @@ def create_application() -> FastAPI:
         }
 
     # Incluir rutas de la API
-    app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+    app.include_router(users.router, prefix="/api/v1/users", tags=["Usuarios"])
+    app.include_router(stores.router, prefix="/api/v1/stores", tags=["Tiendas"])
     
     # Middleware para logging de peticiones
     @app.middleware("http")

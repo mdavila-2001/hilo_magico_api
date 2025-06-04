@@ -1,107 +1,181 @@
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.user import UserCreate, UserOut, UserUpdate
+
+from app.schemas.user import UserCreate, UserOut, UserUpdate, UserInDB
 from app.schemas.response import APIResponse
-from app.services.user_service import (
-    create_user, get_user_by_id, update_user, delete_user, get_all_users
-)
-from app.db.session import SessionLocal
+from app.db.session import get_db
+from app.services.user import UserService
 
-router = APIRouter()
-
-# Dependency para la DB
-async def get_db():
-    async with SessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+router = APIRouter(prefix="/users", tags=["users"])
 
 # 🟢 Crear usuario
-@router.post("/", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
-async def create(user: UserCreate, db: AsyncSession = Depends(get_db)):
+@router.post(
+    "/",
+    response_model=APIResponse[UserOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un nuevo usuario",
+    description="Crea un nuevo usuario en el sistema con los datos proporcionados."
+)
+async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Crea un nuevo usuario en el sistema.
+    
+    - **email**: Email del usuario (debe ser único)
+    - **password**: Contraseña (mínimo 6 caracteres)
+    - **full_name**: Nombre completo del usuario (opcional)
+    """
     try:
-        result = await create_user(db, user)
-        return APIResponse(
-            data=UserOut.from_orm(result),
+        user_service = UserService(db)
+        db_user = await user_service.create_user(user)
+        return APIResponse[UserOut](
+            data=UserOut.from_orm(db_user),
             message="Usuario registrado con éxito"
         )
-    except HTTPException as e:
-        return APIResponse(
-            success=False,
-            message=str(e.detail),
-            status_code=e.status_code
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al crear el usuario"
         )
 
 # 📄 Obtener todos los usuarios
-@router.get("/", response_model=APIResponse)
-async def get_users(db: AsyncSession = Depends(get_db)):
+@router.get(
+    "/",
+    response_model=APIResponse[List[UserOut]],
+    summary="Listar usuarios",
+    description="Obtiene una lista de todos los usuarios registrados en el sistema."
+)
+async def get_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Obtiene una lista paginada de usuarios.
+    
+    - **skip**: Número de registros a saltar (para paginación)
+    - **limit**: Número máximo de registros a devolver (máx. 100)
+    """
     try:
-        users = await get_all_users(db)
-        return APIResponse(
+        user_service = UserService(db)
+        users = await user_service.get_users(skip=skip, limit=limit)
+        return APIResponse[List[UserOut]](
             data=[UserOut.from_orm(user) for user in users],
             message="Usuarios obtenidos exitosamente"
         )
-    except HTTPException as e:
-        return APIResponse(
-            success=False,
-            message=str(e.detail),
-            status_code=e.status_code
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener los usuarios"
         )
 
 # 🔍 Obtener usuario por ID
-@router.get("/{user_id}", response_model=APIResponse)
+@router.get(
+    "/{user_id}",
+    response_model=APIResponse[UserOut],
+    summary="Obtener usuario por ID",
+    description="Obtiene la información detallada de un usuario específico."
+)
 async def read_user(user_id: str, db: AsyncSession = Depends(get_db)):
     try:
-        user = await get_user_by_id(db, user_id)
+        user_service = UserService(db)
+        user = await user_service.get_user_by_id(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Usuario no encontrado"
             )
-        return APIResponse(
+        return APIResponse[UserOut](
             data=UserOut.from_orm(user),
             message="Usuario encontrado exitosamente"
         )
     except HTTPException as e:
-        return APIResponse(
-            success=False,
-            message=str(e.detail),
-            status_code=e.status_code
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener el usuario"
         )
 
 # 📝 Actualizar usuario
-@router.put("/{user_id}", response_model=APIResponse)
-async def update(user_id: str, data: UserUpdate, db: AsyncSession = Depends(get_db)):
+@router.put(
+    "/{user_id}",
+    response_model=APIResponse[UserOut],
+    summary="Actualizar usuario",
+    description="Actualiza la información de un usuario existente."
+)
+async def update_user(
+    user_id: str,
+    user_update: UserUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Actualiza un usuario existente.
+    
+    - **user_id**: ID del usuario a actualizar
+    - **user_update**: Datos a actualizar (todos los campos son opcionales)
+    """
     try:
-        result = await update_user(db, user_id, data)
-        return APIResponse(
-            data=UserOut.from_orm(result),
-            message="Usuario actualizado con éxito"
+        user_service = UserService(db)
+        updated_user = await user_service.update_user(user_id, user_update)
+        
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+            
+        return APIResponse[UserOut](
+            data=UserOut.from_orm(updated_user),
+            message="Usuario actualizado exitosamente"
         )
-    except HTTPException as e:
-        return APIResponse(
-            success=False,
-            message=str(e.detail),
-            status_code=e.status_code
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al actualizar el usuario"
         )
 
-# ❌ Eliminar lógicamente
-@router.delete("/{user_id}", response_model=APIResponse)
-async def delete(user_id: str, db: AsyncSession = Depends(get_db)):
+# ❌ Eliminar usuario (lógicamente)
+@router.delete(
+    "/{user_id}",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Eliminar usuario",
+    description="Elimina un usuario del sistema (eliminación lógica)."
+)
+async def delete_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Elimina un usuario (eliminación lógica).
+    
+    - **user_id**: ID del usuario a eliminar
+    """
     try:
-        result = await delete_user(db, user_id)
-        return APIResponse(
-            data=result,
-            message="Usuario desvinculado con éxito"
+        user_service = UserService(db)
+        success = await user_service.delete_user(user_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+            
+        return APIResponse[Dict[str, Any]](
+            data={"id": user_id},
+            message="Usuario eliminado exitosamente"
         )
-    except HTTPException as e:
-        return APIResponse(
-            success=False,
-            message=str(e.detail),
-            status_code=e.status_code
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al eliminar el usuario"
         )
