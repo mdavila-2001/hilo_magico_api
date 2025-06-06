@@ -13,10 +13,61 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-# 🔍 Verifica si el email ya existe
-async def get_user_by_email(db: AsyncSession, email: str):
-    result = await db.execute(select(User).filter(User.email == email))
+# 🔍 Verifica si el email ya está en uso por un usuario activo
+async def get_user_by_email(db: AsyncSession, email: str, include_inactive: bool = False):
+    """
+    Busca un usuario por email.
+    
+    Args:
+        db: Sesión de base de datos
+        email: Email a buscar
+        include_inactive: Si es True, incluye usuarios inactivos en la búsqueda
+        
+    Returns:
+        User: El usuario encontrado o None
+    """
+    query = select(User).filter(User.email == email)
+    if not include_inactive:
+        query = query.filter(User.is_active == True)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
+
+# 🔄 Restaura un usuario eliminado lógicamente
+async def restore_user(db: AsyncSession, email: str):
+    """
+    Restaura un usuario eliminado lógicamente.
+    
+    Args:
+        db: Sesión de base de datos
+        email: Email del usuario a restaurar
+        
+    Returns:
+        User: El usuario restaurado
+        
+    Raises:
+        HTTPException: Si el usuario no existe o ya está activo
+    """
+    # Buscar incluyendo usuarios inactivos
+    user = await get_user_by_email(db, email, include_inactive=True)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
+        
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El usuario ya está activo"
+        )
+        
+    user.is_active = True
+    user.deleted_at = None
+    
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 # 🔍 Verifica si el usuario existe por ID
 async def get_user_by_id(db: AsyncSession, user_id: UUID4 | str):
@@ -30,8 +81,8 @@ async def get_user_by_id(db: AsyncSession, user_id: UUID4 | str):
 
 # ✅ Crear usuario nuevo
 async def create_user(db: AsyncSession, user_data: UserCreate):
-    # Validación de duplicados
-    existing_user = await get_user_by_email(db, user_data.email)
+    # Validación de duplicados (solo usuarios activos)
+    existing_user = await get_user_by_email(db, user_data.email, include_inactive=False)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

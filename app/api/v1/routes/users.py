@@ -17,7 +17,8 @@ from app.services.user_service import (
     create_user as create_user_service,  # Renombrar para evitar conflicto
     get_all_users as get_all_db_users,
     update_user as update_db_user,
-    delete_user as delete_db_user
+    delete_user as delete_db_user,
+    restore_user as restore_user_service  # Añadir la función de restauración
 )
 
 # Configurar logging
@@ -281,6 +282,61 @@ async def update_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al actualizar el usuario"
+        )
+
+# Restaurar usuario eliminado
+@router.post(
+    "/restore/{email}",
+    response_model=APIResponse[UserOut],
+    status_code=status.HTTP_200_OK,
+    summary="Restaurar usuario eliminado",
+    description="Reactiva un usuario que fue eliminado lógicamente.",
+    responses={
+        200: {"description": "Usuario restaurado exitosamente"},
+        400: {"description": "El usuario ya está activo"},
+        404: {"description": "Usuario no encontrado"},
+        500: {"description": "Error interno del servidor"}
+    }
+)
+async def restore_user(
+    email: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Reactiva un usuario que fue eliminado lógicamente.
+    
+    - **email**: Correo electrónico del usuario a restaurar
+    """
+    try:
+        restored_user = await restore_user_service(db, email)
+        
+        # Convertir el usuario a un diccionario para la respuesta
+        user_dict = {
+            "id": str(restored_user.id),
+            "email": restored_user.email,
+            "first_name": restored_user.first_name,
+            "last_name": restored_user.last_name,
+            "is_active": restored_user.is_active,
+            "created_at": restored_user.created_at.isoformat() if restored_user.created_at else None,
+            "updated_at": restored_user.updated_at.isoformat() if restored_user.updated_at else None,
+            "deleted_at": restored_user.deleted_at.isoformat() if restored_user.deleted_at else None
+        }
+        
+        return APIResponse[UserOut](
+            data=UserOut(**user_dict),
+            message="Usuario restaurado exitosamente",
+            status_code=status.HTTP_200_OK
+        )
+        
+    except HTTPException as http_exc:
+        # Re-lanzar excepciones HTTP
+        raise http_exc
+        
+    except Exception as e:
+        logger.error(f"Error al restaurar usuario: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al restaurar el usuario"
         )
 
 # Eliminar usuario (lógicamente)
