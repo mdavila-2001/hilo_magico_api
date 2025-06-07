@@ -36,7 +36,7 @@ class APIResponse(GenericModel, Generic[T]):
         }
     
     @classmethod
-    def success(
+    def create_success(
         cls,
         data: Optional[Any] = None,
         message: str = "Operación exitosa",
