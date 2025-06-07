@@ -1,25 +1,23 @@
-from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.controllers.auth_controller import AuthController
 from app.core.config import settings
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    get_current_active_user,
-    get_password_hash,
-)
+from app.core.security import get_current_active_user
 from app.db.session import get_db
 from app.schemas.response import APIResponse
 from app.schemas.token import Token, TokenData
-from app.schemas.user import UserBase, UserCreate, UserInDB, UserOut
-from app.services.user import UserService
+from app.schemas.user import UserBase, UserCreate, UserOut
+
+class LoginRequest(BaseModel):
+    """Esquema para la solicitud de inicio de sesión"""
+    email: EmailStr = Field(..., description="Correo electrónico del usuario")
+    password: str = Field(..., min_length=6, description="Contraseña del usuario")
 
 router = APIRouter(tags=["Autenticación"])
-
 
 @router.post(
     "/login",
@@ -28,48 +26,17 @@ router = APIRouter(tags=["Autenticación"])
     description="Autentica un usuario y devuelve tokens de acceso y actualización.",
 )
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[Token]:
     """
     Inicia sesión de un usuario y devuelve tokens de acceso y actualización.
     
-    - **username**: Correo electrónico del usuario
+    - **email**: Correo electrónico del usuario
     - **password**: Contraseña del usuario
     """
-    user_service = UserService(db)
-    user = await user_service.authenticate(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Correo electrónico o contraseña incorrectos",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    elif not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Usuario inactivo",
-        )
-
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
-    )
-    refresh_token = create_refresh_token(
-        data={"sub": str(user.id)}, expires_delta=refresh_token_expires
-    )
-    
-    return APIResponse[Token](
-        data=Token(
-            access_token=access_token,
-            token_type="bearer",
-            refresh_token=refresh_token,
-        ),
-        message="Inicio de sesión exitoso",
-    )
-
+    auth_controller = AuthController(db)
+    return await auth_controller.login(login_data.email, login_data.password)
 
 @router.post(
     "/refresh-token",
@@ -122,23 +89,8 @@ async def register_user(
     - **password**: Contraseña (mínimo 6 caracteres)
     - **full_name**: Nombre completo del usuario (opcional)
     """
-    user_service = UserService(db)
-    
-    # Verificar si el usuario ya existe
-    existing_user = await user_service.get_user_by_email(user_in.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El correo electrónico ya está registrado",
-        )
-    
-    # Crear el usuario
-    db_user = await user_service.create_user(user_in)
-    
-    return APIResponse[UserOut](
-        data=UserOut.from_orm(db_user),
-        message="Usuario registrado exitosamente",
-    )
+    auth_controller = AuthController(db)
+    return await auth_controller.register(user_in)
 
 
 @router.get(
