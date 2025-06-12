@@ -171,7 +171,48 @@ class UserListResponse(APIResponse[List[UserOut]]):
 
 class UserResponse(APIResponse[UserOut]):
     """Respuesta para operaciones con un solo usuario."""
-    pass
+    data: Optional[UserOut] = None
+    
+    @classmethod
+    def from_entity(cls, user: 'User') -> 'UserResponse':
+        """
+        Crea una instancia de UserResponse a partir de una entidad de dominio User.
+        
+        Args:
+            user: Instancia de la entidad de dominio User
+            
+        Returns:
+            UserResponse: Instancia de UserResponse con los datos del usuario
+        """
+        # Extraer nombre y apellido del objeto FullName si existe
+        first_name = user.full_name.first_name if user.full_name else ""
+        last_name = user.full_name.last_name if user.full_name else ""
+        
+        # Crear el diccionario con los datos del usuario
+        user_data = {
+            'id': user.id,
+            'email': str(user.email) if user.email else "",
+            'first_name': first_name,
+            'middle_name': "",  # No manejado en la entidad de dominio
+            'last_name': last_name,
+            'mother_last_name': "",  # No manejado en la entidad de dominio
+            'is_active': user.is_active,
+            'role': "user",  # Valor por defecto ya que no está en la entidad
+            'created_at': user.created_at.isoformat() if user.created_at else None,
+            'updated_at': user.updated_at.isoformat() if user.updated_at else None
+        }
+        
+        # Construir el full_name para la respuesta
+        user_data['full_name'] = f"{first_name} {last_name}".strip()
+        
+        # Crear el objeto UserOut con los datos
+        user_out = UserOut(**user_data)
+        
+        return cls(
+            success=True,
+            message="Operación exitosa",
+            data=user_out
+        )
 
 
 class Token(BaseModel):
