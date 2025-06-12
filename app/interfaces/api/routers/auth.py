@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....domain.repositories.user_repository import UserRepository
-from .....infrastructure.persistence.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from .....interfaces.api.controllers.auth_controller import AuthController
-from .....schemas.response import APIResponse
-from .....schemas.token import Token
-from .....db.session import get_db
+from app.domain.repositories.user_repository import UserRepository
+from app.infrastructure.persistence.sqlalchemy_user_repository import SQLAlchemyUserRepository
+from app.interfaces.api.controllers.auth_controller import AuthController
+from app.schemas.response import APIResponse
+from app.schemas.token import Token
+from app.db.session import get_db
 
 router = APIRouter(tags=["Autenticación"])
 

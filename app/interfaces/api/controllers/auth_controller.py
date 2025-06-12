@@ -3,16 +3,16 @@ from typing import Optional
 from fastapi import HTTPException, status, Depends
 from pydantic import EmailStr
 
-from ....domain.entities.user import User
-from ....domain.events import event_bus
-from ....domain.repositories.user_repository import UserRepository
-from ....domain.services.auth_service import AuthService
-from ....infrastructure.persistence.sqlalchemy_unit_of_work import SQLAlchemyUnitOfWork
-from .....core.logging_config import get_logger
-from .....schemas.response import APIResponse
-from .....schemas.token import Token
-from .....schemas.user import UserCreate, UserResponse
-from .....core.dependencies import get_unit_of_work
+from app.domain.entities.user import User
+from app.domain.events import event_bus
+from app.domain.repositories.user_repository import UserRepository
+from app.domain.services.auth_service import AuthService
+from app.infrastructure.persistence.sqlalchemy_unit_of_work import SQLAlchemyUnitOfWork
+from app.core.logging_config import get_logger
+from app.schemas.response import APIResponse
+from app.schemas.token import Token
+from app.schemas.user import UserCreate, UserResponse
+from app.core.dependencies import get_unit_of_work
 
 # Configurar logger
 logger = get_logger(__name__)
