@@ -6,14 +6,10 @@ from sqlalchemy.orm import relationship
 import uuid
 
 from app.db.session import Base
+from app.schemas.user import UserRole
 
-class UserRole(str, enum.Enum):
-    """Enumeración de roles de usuario en la tienda"""
-    OWNER = 'owner'     # Dueño de la tienda (máximos privilegios)
-    ADMIN = 'admin'     # Administrador de la tienda
-    MANAGER = 'manager' # Gerente/encargado
-    STAFF = 'staff'     # Personal de la tienda
-    VIEWER = 'viewer'   # Solo lectura
+# Usamos el UserRole de app.schemas.user que ya está importado
+# Este enum incluye: ADMIN, USER, SELLER, OWNER, CUSTOMER
 
 class UserStoreAssociation(Base):
     """Modelo para la relación muchos a muchos entre User y Store"""
@@ -23,7 +19,7 @@ class UserStoreAssociation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('development.users.id'), index=True, nullable=False)
     store_id = Column(UUID(as_uuid=True), ForeignKey('development.stores.id'), index=True, nullable=False)
-    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.STAFF)
+    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.USER)  # Cambiado de STAFF a USER
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())

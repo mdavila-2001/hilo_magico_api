@@ -8,12 +8,21 @@ from pydantic import BaseModel, EmailStr, Field, validator, ConfigDict, model_va
 from app.schemas.response import APIResponse
 
 
-class UserRole(str, Enum):
-    """Roles de usuario disponibles en el sistema."""
-    ADMIN = "admin"
-    USER = "user"
-    SELLER = "seller"
-    OWNER = "owner"
+class UserRole(int, Enum):
+    """Roles de usuario disponibles en el sistema.
+    
+    Valores:
+        USER = 0 (default)
+        ADMIN = 1
+        OWNER = 2
+        SELLER = 3
+        CUSTOMER = 4
+    """
+    USER = 0
+    ADMIN = 1
+    OWNER = 2
+    SELLER = 3
+    CUSTOMER = 4
 
 
 class UserBase(BaseModel):

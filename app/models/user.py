@@ -23,7 +23,7 @@ class User(Base):
     # Campos de autenticación y autorización
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
+    role = Column(Integer, default=0, nullable=False)  # 0=USER, 1=ADMIN, 2=OWNER, 3=SELLER, 4=CUSTOMER
     
     # Timestamps - Using timezone-naive datetimes for compatibility
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
