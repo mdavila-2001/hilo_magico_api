@@ -1,14 +1,13 @@
 import uuid
-from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from app.db.session import Base
 from app.schemas.user import UserRole
+from app.models.base import TimestampMixin
 
-class User(Base):
+class User(Base, TimestampMixin):
     __tablename__ = "users"
     __table_args__ = {"schema": "development"}
 
@@ -24,11 +23,6 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     role = Column(Integer, default=0, nullable=False)  # 0=USER, 1=ADMIN, 2=OWNER, 3=SELLER, 4=CUSTOMER
-    
-    # Timestamps - Using timezone-naive datetimes for compatibility
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, onupdate=func.now())
-    deleted_at = Column(DateTime, nullable=True)
     
     # Relaciones comentadas temporalmente para simplificar
     # store_associations = relationship('UserStoreAssociation', back_populates='user')

@@ -38,9 +38,18 @@ def create_application() -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
         logger.error(f"Error de validación: {exc.errors()}")
+        
+        # Convertir el cuerpo a string si es bytes
+        body = exc.body
+        if isinstance(body, bytes):
+            try:
+                body = body.decode('utf-8')
+            except UnicodeDecodeError:
+                body = str(body)
+        
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"detail": exc.errors(), "body": exc.body},
+            content={"detail": exc.errors(), "body": body},
         )
 
     # Ruta raíz

@@ -9,7 +9,7 @@ import logging
 from app.models.store import Store
 from app.schemas.store import StoreCreate, StoreUpdate, StoreInDB
 from app.core.security import get_password_hash
-from app.core.exceptions import NotFoundException, DatabaseError
+from app.core.exceptions import NotFoundException, DatabaseException
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class StoreService:
             StoreInDB con los datos de la tienda creada
             
         Raises:
-            DatabaseError: Si ocurre un error al crear la tienda
+            DatabaseException: Si ocurre un error al crear la tienda
         """
         try:
             # Crear la tienda
@@ -51,7 +51,7 @@ class StoreService:
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Error al crear tienda: {str(e)}")
-            raise DatabaseError(f"No se pudo crear la tienda: {str(e)}")
+            raise DatabaseException(f"No se pudo crear la tienda: {str(e)}")
     
     async def get_store(self, store_id: UUID) -> Optional[StoreInDB]:
         """
@@ -83,7 +83,7 @@ class StoreService:
             
         except Exception as e:
             logger.error(f"Error al obtener tienda {store_id}: {str(e)}")
-            raise DatabaseError(f"Error al recuperar la tienda: {str(e)}")
+            raise DatabaseException(f"Error al recuperar la tienda: {str(e)}")
     
     async def get_stores(
         self,
@@ -152,7 +152,7 @@ class StoreService:
             
         except Exception as e:
             logger.error(f"Error al obtener tiendas: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Error al recuperar tiendas: {str(e)}")
+            raise DatabaseException(f"Error al recuperar tiendas: {str(e)}")
     
     async def update_store(
         self,
@@ -170,7 +170,7 @@ class StoreService:
             StoreInDB con los datos actualizados, o None si no se encontró la tienda
             
         Raises:
-            DatabaseError: Si ocurre un error al actualizar
+            DatabaseException: Si ocurre un error al actualizar
         """
         try:
             # Obtener la tienda existente
@@ -202,8 +202,8 @@ class StoreService:
             
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Error al actualizar tienda {store_id}: {str(e)}")
-            raise DatabaseError(f"No se pudo actualizar la tienda: {str(e)}")
+            logger.error(f"Error al actualizar tienda {store_id}: {str(e)}", exc_info=True)
+            raise DatabaseException(f"No se pudo actualizar la tienda: {str(e)}")
     
     async def delete_store(self, store_id: UUID) -> bool:
         """
@@ -216,7 +216,7 @@ class StoreService:
             bool: True si se eliminó correctamente, False si no se encontró la tienda
             
         Raises:
-            DatabaseError: Si ocurre un error al eliminar
+            DatabaseException: Si ocurre un error al eliminar
         """
         try:
             # Obtener la tienda existente
@@ -246,5 +246,5 @@ class StoreService:
             
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Error al eliminar tienda {store_id}: {str(e)}")
-            raise DatabaseError(f"No se pudo eliminar la tienda: {str(e)}")
+            logger.error(f"Error al eliminar tienda {store_id}: {str(e)}", exc_info=True)
+            raise DatabaseException(f"No se pudo eliminar la tienda: {str(e)}")

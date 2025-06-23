@@ -166,7 +166,7 @@ async def get_current_user(
         UnauthorizedException: If the token is invalid or user not found
     """
     if not token:
-        raise UnauthorizedException(detail="No authentication token provided")
+        raise UnauthorizedException(detail="No se encuentra con la sesión activa")
     
     try:
         # Decode the token
@@ -183,9 +183,14 @@ async def get_current_user(
             raise InvalidTokenException(detail="Invalid token payload: missing 'sub' claim")
             
         # Get user from database
-        user = await db.get(User, int(user_id))
-        if not user:
-            raise UnauthorizedException(detail="User not found")
+        from uuid import UUID
+        try:
+            user = await db.get(User, UUID(user_id))
+            if not user:
+                raise UnauthorizedException(detail="User not found")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid user ID format: {str(e)}")
+            raise UnauthorizedException(detail="Invalid user ID format")
             
         # Check if user is active
         if not user.is_active:

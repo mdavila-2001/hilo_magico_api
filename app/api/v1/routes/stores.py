@@ -14,7 +14,7 @@ from app.services.user_store import UserStoreService
 from app.core.security import get_current_user, get_current_admin_user, get_current_superuser
 from app.core.permissions import store_permissions
 from app.core.exceptions import (
-    DatabaseError, NotFoundException, ForbiddenException, 
+    DatabaseException, NotFoundException, ForbiddenException, 
     BadRequestException, ConflictException
 )
 from app.models.user import User, UserRole
