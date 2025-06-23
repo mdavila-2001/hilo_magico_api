@@ -218,5 +218,80 @@ async def get_current_active_user(
         ForbiddenException: If the user is inactive
     """
     if not current_user.is_active:
-        raise ForbiddenException(detail="Inactive user")
+        logger.warning(f"Intento de acceso de usuario inactivo: {current_user.email}")
+        raise ForbiddenException("Usuario inactivo")
     return current_user
+
+
+def check_user_permissions(
+    required_roles: list[str] = None,
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """
+    Verifica si el usuario actual tiene los permisos necesarios.
+    
+    Args:
+        required_roles: Lista de roles requeridos. Si es None, cualquier usuario autenticado tiene acceso.
+        current_user: Usuario actual obtenido del token JWT.
+        
+    Returns:
+        User: El usuario actual si tiene los permisos necesarios.
+        
+    Raises:
+        ForbiddenException: Si el usuario no tiene los permisos necesarios.
+    """
+    if required_roles is None:
+        required_roles = ["user"]  # Por defecto, cualquier usuario autenticado
+        
+    # Si el usuario es superadmin, tiene acceso a todo
+    if current_user.role == "superuser":
+        return current_user
+        
+    # Verificar si el rol del usuario está en los roles requeridos
+    if current_user.role not in required_roles:
+        logger.warning(
+            f"Intento de acceso no autorizado. "
+            f"Usuario: {current_user.email}, Rol: {current_user.role}, "
+            f"Roles requeridos: {required_roles}"
+        )
+        raise ForbiddenException(
+            "No tiene permisos suficientes para acceder a este recurso"
+        )
+        
+    return current_user
+
+
+def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """
+    Verifica que el usuario actual sea un administrador.
+    
+    Args:
+        current_user: Usuario actual obtenido del token JWT.
+        
+    Returns:
+        User: El usuario actual si es administrador.
+        
+    Raises:
+        ForbiddenException: Si el usuario no es administrador.
+    """
+    return check_user_permissions(required_roles=["admin", "superuser"], current_user=current_user)
+
+
+def get_current_superuser(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """
+    Verifica que el usuario actual sea un superusuario.
+    
+    Args:
+        current_user: Usuario actual obtenido del token JWT.
+        
+    Returns:
+        User: El usuario actual si es superusuario.
+        
+    Raises:
+        ForbiddenException: Si el usuario no es superusuario.
+    """
+    return check_user_permissions(required_roles=["superuser"], current_user=current_user)

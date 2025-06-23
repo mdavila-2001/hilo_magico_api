@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -53,10 +53,27 @@ def create_application() -> FastAPI:
             "docs": "/api/docs" if settings.ENVIRONMENT != "production" else None,
         }
 
+    # Importar dependencias de autenticación
+    from app.core.security import get_current_active_user, check_user_permissions
+    from app.models.user import UserRole
+
     # Incluir routers
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticación"])
-    app.include_router(users.router, prefix="/api/v1/users", tags=["Usuarios"])
-    app.include_router(stores.router, prefix="/api/v1/stores", tags=["Tiendas"])
+    
+    # Rutas protegidas que requieren autenticación
+    app.include_router(
+        users.router,
+        prefix="/api/v1/users",
+        tags=["Usuarios"],
+        dependencies=[Depends(get_current_active_user)]
+    )
+    
+    app.include_router(
+        stores.router,
+        prefix="/api/v1/stores",
+        tags=["Tiendas"],
+        dependencies=[Depends(get_current_active_user)]
+    )
     
     # Middleware para logging de peticiones
     @app.middleware("http")

@@ -1,7 +1,8 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
+import logging
 
 from app.db.session import get_db
 from app.schemas.store import (
@@ -10,9 +11,43 @@ from app.schemas.store import (
 )
 from app.services.store import StoreService
 from app.services.user_store import UserStoreService
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_admin_user, get_current_superuser
+from app.core.permissions import store_permissions
+from app.core.exceptions import (
+    DatabaseError, NotFoundException, ForbiddenException, 
+    BadRequestException, ConflictException
+)
+from app.models.user import User, UserRole
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# Dependencia para verificar si el usuario es propietario de la tienda
+async def get_store_owner(store_id: UUID, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """
+    Dependencia que verifica si el usuario actual es propietario de la tienda.
+    
+    Args:
+        store_id: ID de la tienda
+        db: Sesión de base de datos
+        current_user: Usuario actual autenticado
+        
+    Returns:
+        dict: Datos del usuario si es propietario
+        
+    Raises:
+        HTTPException: Si el usuario no es propietario de la tienda
+    """
+    user_store_service = UserStoreService(db)
+    user_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
+    
+    if user_role != UserRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el propietario de la tienda puede realizar esta acción"
+        )
+    
+    return current_user
 
 # Endpoints para Tiendas (Stores)
 
@@ -47,41 +82,89 @@ async def create_store(
     "/",
     response_model=StoreListResponse,
     summary="Listar todas las tiendas",
-    description="Obtiene una lista de todas las tiendas disponibles en el sistema con paginación.",
+    description="""Obtiene una lista de todas las tiendas disponibles en el sistema con paginación. 
+    Requiere rol de administrador o superusuario.""",
     tags=["Tiendas"],
     responses={
         200: {"description": "Lista de tiendas obtenida exitosamente"},
-        401: {"description": "No autorizado"},
-        403: {"description": "No tiene permisos para realizar esta acción"}
+        401: {"description": "No autorizado - Se requiere autenticación"},
+        403: {"description": "No tiene permisos para realizar esta acción"},
+        500: {"description": "Error interno del servidor"}
     }
 )
 async def list_stores(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Número de registros a omitir"),
+    limit: int = Query(100, le=100, description="Número máximo de registros a devolver"),
+    name: Optional[str] = Query(None, description="Filtrar por nombre de tienda"),
+    is_active: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_admin_user)
 ):
     """
     Obtiene una lista paginada de todas las tiendas.
     
+    Solo disponible para administradores y superusuarios.
+    
     - **skip**: Número de registros a omitir (paginación)
-    - **limit**: Número máximo de registros a devolver (paginación)
+    - **limit**: Número máximo de registros a devolver (máx. 100)
+    - **name**: Filtrar por nombre de tienda (opcional)
+    - **is_active**: Filtrar por estado activo/inactivo (opcional)
     """
-    store_service = StoreService(db)
-    stores = await store_service.get_stores(skip=skip, limit=limit)
-    return {"data": stores}
+    try:
+        store_service = StoreService(db)
+        
+        # Construir filtros
+        filters = []
+        if name:
+            from sqlalchemy import or_
+            filters.append(Store.name.ilike(f"%{name}%"))
+        if is_active is not None:
+            filters.append(Store.is_active == is_active)
+            
+        # Obtener tiendas con los filtros aplicados
+        result = await store_service.get_stores(
+            skip=skip, 
+            limit=limit,
+            filters=filters if filters else None,
+            order_by="-created_at"  # Ordenar por fecha de creación por defecto
+        )
+        
+        return {
+            "data": result["data"], 
+            "success": True, 
+            "message": "Tiendas obtenidas exitosamente",
+            "total": result["total"],
+            "skip": result["skip"],
+            "limit": result["limit"],
+            "has_more": result["has_more"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error al listar tiendas: {str(e)}", exc_info=True)
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener la lista de tiendas"
+        )
 
 @router.get(
     "/{store_id}",
     response_model=StoreResponse,
     summary="Obtener detalles de una tienda",
-    description="Obtiene los detalles de una tienda específica por su ID.",
+    description="""Obtiene los detalles de una tienda específica por su ID.
+    
+    - Los administradores pueden ver cualquier tienda.
+    - Los propietarios solo pueden ver sus propias tiendas.
+    - Los vendedores solo pueden ver las tiendas donde trabajan.
+    """,
     tags=["Tiendas"],
     responses={
         200: {"description": "Detalles de la tienda obtenidos exitosamente"},
-        401: {"description": "No autorizado"},
+        401: {"description": "No autorizado - Se requiere autenticación"},
         403: {"description": "No tiene permisos para ver esta tienda"},
-        404: {"description": "Tienda no encontrada"}
+        404: {"description": "Tienda no encontrada"},
+        500: {"description": "Error interno del servidor"}
     }
 )
 async def get_store(
@@ -92,41 +175,67 @@ async def get_store(
     """
     Obtiene los detalles de una tienda específica.
     
-    - **store_id**: ID de la tienda a consultar
+    - **store_id**: ID de la tienda a consultar (UUID)
+    
+    Nota: 
+    - Los administradores pueden ver cualquier tienda.
+    - Los propietarios solo pueden ver sus propias tiendas.
+    - Los vendedores solo pueden ver las tiendas donde trabajan.
     """
-    store_service = StoreService(db)
-    store = await store_service.get_store(store_id)
-    
-    if not store:
+    try:
+        store_service = StoreService(db)
+        store = await store_service.get_store(store_id)
+        
+        if not store:
+            raise NotFoundException("Tienda no encontrada")
+            
+        # Verificar permisos
+        user_role = current_user.get("role")
+        
+        # Si no es admin, verificar si tiene acceso a la tienda
+        if user_role not in [UserRole.ADMIN, UserRole.SUPERUSER]:
+            user_store_service = UserStoreService(db)
+            user_store = await user_store_service.get_user_store(store_id, current_user["id"])
+            
+            if not user_store:
+                raise ForbiddenException("No tiene permisos para ver esta tienda")
+        
+        return {
+            "data": store, 
+            "success": True, 
+            "message": "Tienda obtenida exitosamente"
+        }
+        
+    except (NotFoundException, ForbiddenException) as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tienda no encontrada"
+            status_code=e.status_code,
+            detail=str(e)
         )
-    
-    # Verificar permisos (solo administradores o usuarios con acceso a la tienda)
-    user_store_service = UserStoreService(db)
-    user_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
-    
-    if not user_role and current_user["role"] != "admin":
+    except Exception as e:
+        logger.error(f"Error al obtener tienda {store_id}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para ver esta tienda"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener los detalles de la tienda"
         )
-    
-    return {"data": store}
 
 @router.put(
     "/{store_id}",
     response_model=StoreResponse,
     summary="Actualizar una tienda",
-    description="Actualiza la información de una tienda existente.",
+    description="""Actualiza la información de una tienda existente.
+    
+    - Solo el propietario de la tienda puede actualizar toda la información.
+    - Los administradores pueden actualizar cualquier tienda.
+    - Los vendedores solo pueden actualizar ciertos campos.
+    """,
     tags=["Tiendas"],
     responses={
         200: {"description": "Tienda actualizada exitosamente"},
         400: {"description": "Datos de entrada no válidos"},
-        401: {"description": "No autorizado"},
+        401: {"description": "No autorizado - Se requiere autenticación"},
         403: {"description": "No tiene permisos para actualizar esta tienda"},
-        404: {"description": "Tienda no encontrada"}
+        404: {"description": "Tienda no encontrada"},
+        500: {"description": "Error interno del servidor"}
     }
 )
 async def update_store(
@@ -140,36 +249,53 @@ async def update_store(
     
     - **store_id**: ID de la tienda a actualizar
     - **store_in**: Datos a actualizar (todos los campos son opcionales)
-    """
-    store_service = StoreService(db)
-    user_store_service = UserStoreService(db)
     
+    Nota:
+    - Solo el propietario puede actualizar toda la información.
+    - Los administradores pueden actualizar cualquier tienda.
+    - Los vendedores solo pueden actualizar ciertos campos.
+    """
     try:
-        # Verificar permisos (solo administradores o dueños/admin de la tienda pueden actualizar)
-        user_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
+        store_service = StoreService(db)
+        user_store_service = UserStoreService(db)
         
-        if not user_role and current_user["role"] != "admin":
-            raise ForbiddenException("No tiene permisos para actualizar esta tienda")
-        
-        # Si es staff, solo puede actualizar ciertos campos
-        if user_role and user_role not in [UserRole.OWNER, UserRole.ADMIN] and current_user["role"] != "admin":
-            # Solo permitir actualizar ciertos campos para managers/staff
-            update_data = store_in.dict(exclude_unset=True)
-            allowed_fields = ["description", "phone", "email"]
-            if any(field not in allowed_fields for field in update_data.keys()):
-                raise ForbiddenException("No tiene permisos para actualizar estos campos")
-        
-        updated_store = await store_service.update_store(store_id, store_in)
-        if not updated_store:
+        # Verificar que la tienda existe
+        store = await store_service.get_store(store_id)
+        if not store:
             raise NotFoundException("Tienda no encontrada")
         
-        return {"data": updated_store}
+        # Verificar permisos
+        user_role = current_user.get("role")
+        user_store_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
         
-    except NotFoundException as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except ForbiddenException as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        # Si no es admin, verificar permisos específicos
+        if user_role not in [UserRole.ADMIN, UserRole.SUPERUSER]:
+            if not user_store_role:
+                raise ForbiddenException("No tiene permisos para actualizar esta tienda")
+            
+            # Si es vendedor, solo puede actualizar ciertos campos
+            if user_store_role == UserRole.SELLER:
+                update_data = store_in.dict(exclude_unset=True)
+                allowed_fields = ["description", "phone", "email"]
+                if any(field not in allowed_fields for field in update_data.keys()):
+                    raise ForbiddenException("Solo puede actualizar la descripción, teléfono y correo")
+        
+        # Actualizar la tienda
+        updated_store = await store_service.update_store(store_id, store_in)
+        
+        return {
+            "data": updated_store, 
+            "success": True, 
+            "message": "Tienda actualizada exitosamente"
+        }
+        
+    except (NotFoundException, ForbiddenException) as e:
+        raise HTTPException(
+            status_code=e.status_code if hasattr(e, 'status_code') else status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Error al actualizar tienda {store_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al actualizar la tienda"
@@ -177,15 +303,20 @@ async def update_store(
 
 @router.delete(
     "/{store_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Eliminar una tienda",
-    description="Elimina lógicamente una tienda del sistema.",
+    description="""Elimina lógicamente una tienda del sistema.
+    
+    - Solo el propietario de la tienda puede eliminarla.
+    - Los administradores también pueden eliminar cualquier tienda.
+    """,
     tags=["Tiendas"],
     responses={
-        204: {"description": "Tienda eliminada exitosamente"},
-        401: {"description": "No autorizado"},
+        200: {"description": "Tienda eliminada exitosamente"},
+        401: {"description": "No autorizado - Se requiere autenticación"},
         403: {"description": "No tiene permisos para eliminar esta tienda"},
-        404: {"description": "Tienda no encontrada"}
+        404: {"description": "Tienda no encontrada"},
+        500: {"description": "Error interno del servidor"}
     }
 )
 async def delete_store(
@@ -197,26 +328,50 @@ async def delete_store(
     Elimina lógicamente una tienda del sistema.
     
     - **store_id**: ID de la tienda a eliminar
+    
+    Nota: Solo el propietario de la tienda o un administrador pueden eliminarla.
     """
-    store_service = StoreService(db)
-    user_store_service = UserStoreService(db)
-    
-    # Verificar permisos (solo administradores o dueños pueden eliminar)
-    user_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
-    if user_role != UserRole.OWNER and current_user["role"] != "admin":
+    try:
+        store_service = StoreService(db)
+        
+        # Verificar que la tienda existe
+        store = await store_service.get_store(store_id)
+        if not store:
+            raise NotFoundException("Tienda no encontrada")
+        
+        # Verificar permisos
+        user_role = current_user.get("role")
+        
+        # Solo el propietario o un administrador pueden eliminar la tienda
+        if user_role not in [UserRole.ADMIN, UserRole.SUPERUSER]:
+            user_store_service = UserStoreService(db)
+            user_store_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
+            
+            if user_store_role != UserRole.OWNER:
+                raise ForbiddenException("Solo el propietario puede eliminar esta tienda")
+        
+        # Eliminar la tienda
+        success = await store_service.delete_store(store_id)
+        
+        if not success:
+            raise NotFoundException("No se pudo eliminar la tienda")
+        
+        return {
+            "success": True,
+            "message": "Tienda eliminada exitosamente"
+        }
+        
+    except (NotFoundException, ForbiddenException) as e:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo el dueño o un administrador pueden eliminar esta tienda"
+            status_code=e.status_code if hasattr(e, 'status_code') else status.HTTP_403_FORBIDDEN,
+            detail=str(e)
         )
-    
-    success = await store_service.delete_store(store_id)
-    if not success:
+    except Exception as e:
+        logger.error(f"Error al eliminar tienda {store_id}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tienda no encontrada"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al eliminar la tienda"
         )
-    
-    return {"message": "Tienda eliminada exitosamente"}
 
 # Endpoints para la relación Usuario-Tienda (UserStore)
 
