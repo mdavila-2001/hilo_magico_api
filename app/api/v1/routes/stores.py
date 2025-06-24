@@ -19,7 +19,7 @@ from app.core.exceptions import (
 )
 from app.models.user import User, UserRole
 
-router = APIRouter()
+router = APIRouter(tags=["Tiendas"])
 logger = logging.getLogger(__name__)
 
 # Dependencia para verificar si el usuario es propietario de la tienda
@@ -55,17 +55,16 @@ async def get_store_owner(store_id: UUID, db: AsyncSession = Depends(get_db), cu
     "/",
     response_model=StoreResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crear una nueva tienda",
-    description="Crea una nueva tienda con la información proporcionada.",
-    tags=["Tiendas"]
+    summary="Crear nueva tienda",
+    description="Crea una nueva tienda en el sistema con un dueño específico.",
 )
 async def create_store(
     store_in: StoreCreate,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
-):
+) -> StoreResponse:
     """
-    Crea una nueva tienda en el sistema.
+    Crea una nueva tienda en el sistema con un dueño específico.
     
     - **name**: Nombre de la tienda (requerido)
     - **description**: Descripción opcional
@@ -73,10 +72,44 @@ async def create_store(
     - **phone**: Teléfono de contacto (requerido)
     - **email**: Correo electrónico de contacto (opcional)
     - **is_active**: Estado de activación (por defecto: True)
+    - **owner_id**: ID del usuario que será el dueño de la tienda (requerido)
+    
+    Nota: Solo los administradores pueden crear tiendas y asignar dueños.
+    Los usuarios regulares solo pueden crearse tiendas a sí mismos.
     """
-    store_service = StoreService(db)
-    store = await store_service.create_store(store_in, current_user["id"])
-    return {"data": store}
+    try:
+        store_service = StoreService(db)
+        
+        # Verificar permisos
+        if current_user["role"] not in ["admin", "superadmin"]:
+            # Usuarios normales solo pueden crearse tiendas a sí mismos
+            if str(store_in.owner_id) != str(current_user["id"]):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Solo puede crearse tiendas a sí mismo"
+                )
+        
+        # Crear la tienda con el dueño especificado
+        store = await store_service.create_store(store_in)
+        
+        return StoreResponse(
+            data=store,
+            message=f"Tienda creada exitosamente con dueño {store_in.owner_id}"
+        )
+        
+    except DatabaseException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error inesperado al crear tienda: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error inesperado al crear la tienda"
+        )
 
 @router.get(
     "/",

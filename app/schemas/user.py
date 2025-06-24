@@ -115,21 +115,46 @@ class UserOut(BaseModel):
     mother_last_name: Optional[str] = Field(None, description="Apellido materno del usuario (opcional)")
     full_name: str = Field(..., description="Nombre completo del usuario")
     is_active: bool = Field(..., description="Indica si el usuario está activo")
-    role: str = Field(..., description="Rol del usuario")
-    created_at: str = Field(..., description="Fecha de creación del usuario (ISO format)")
-    updated_at: Optional[str] = Field(None, description="Fecha de última actualización (ISO format)")
+    role: Union[str, int] = Field(..., description="Rol del usuario (puede ser string o int)")
+    created_at: Union[str, datetime] = Field(..., description="Fecha de creación del usuario")
+    updated_at: Optional[Union[str, datetime]] = Field(None, description="Fecha de última actualización")
     
     @model_validator(mode='before')
     @classmethod
     def build_full_name(cls, values):
         if isinstance(values, dict):
-            parts = [values.get('first_name', '')]
+            # Construir full_name (siempre debe tener al menos nombre y apellido)
+            first_name = values.get('first_name', '')
+            last_name = values.get('last_name', '')
+            
+            if not first_name or not last_name:
+                raise ValueError("Se requieren al menos el nombre y apellido")
+                
+            parts = [first_name]
             if values.get('middle_name'):
                 parts.append(values['middle_name'])
-            parts.append(values.get('last_name', ''))
+            parts.append(last_name)
             if values.get('mother_last_name'):
                 parts.append(values['mother_last_name'])
-            values['full_name'] = ' '.join(part for part in parts if part)
+                
+            full_name = ' '.join(part for part in parts if part)
+            if not full_name:
+                raise ValueError("No se pudo generar un nombre completo válido")
+                
+            values['full_name'] = full_name
+            
+            # Asegurar que el rol sea string
+            if 'role' in values:
+                if hasattr(values['role'], 'value'):
+                    values['role'] = values['role'].value
+                values['role'] = str(values['role'])
+                
+            # Asegurar que las fechas sean strings
+            if 'created_at' in values and isinstance(values['created_at'], datetime):
+                values['created_at'] = values['created_at'].isoformat()
+            if 'updated_at' in values and values['updated_at'] and isinstance(values['updated_at'], datetime):
+                values['updated_at'] = values['updated_at'].isoformat()
+                
         return values
     
     @classmethod
@@ -143,11 +168,10 @@ class UserOut(BaseModel):
             'last_name': obj.last_name,
             'mother_last_name': obj.mother_last_name,
             'is_active': obj.is_active,
-            'role': obj.role.value if hasattr(obj.role, 'value') else str(obj.role),
-            'created_at': obj.created_at.isoformat() if obj.created_at else None,
-            'updated_at': obj.updated_at.isoformat() if obj.updated_at else None
+            'role': obj.role,
+            'created_at': obj.created_at,
+            'updated_at': obj.updated_at
         }
-        # El validador se encargará de construir el full_name
         return cls(**data)
     
     class Config:
@@ -166,7 +190,7 @@ class UserOut(BaseModel):
                 "mother_last_name": "González",
                 "full_name": "Juan Carlos Pérez González",
                 "is_active": True,
-                "role": "user",
+                "role": "1",
                 "created_at": "2023-01-01T00:00:00",
                 "updated_at": "2023-01-01T00:00:00"
             }

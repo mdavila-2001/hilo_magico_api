@@ -10,6 +10,7 @@ from app.core.security import get_current_active_user
 from app.db.session import get_db
 from app.schemas.response import APIResponse
 from app.schemas.token import Token, TokenData
+from app.models.user import User
 from app.schemas.user import UserBase, UserCreate, UserOut
 
 class LoginRequest(BaseModel):
@@ -96,19 +97,20 @@ async def register_user(
 @router.get(
     "/me",
     response_model=APIResponse[UserOut],
-    summary="Obtener usuario actual",
+    summary="Obtener información del usuario actual",
     description="Obtiene la información del usuario autenticado.",
 )
 async def read_users_me(
-    current_user: UserOut = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> APIResponse[UserOut]:
     """
     Obtiene la información del usuario autenticado.
     
     Devuelve los datos del usuario actualmente autenticado.
     """
+    user_data = UserOut.from_orm(current_user)
     return APIResponse[UserOut](
-        data=current_user,
+        data=user_data,
         message="Información del usuario obtenida exitosamente",
     )
 

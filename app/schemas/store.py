@@ -19,7 +19,7 @@ class StoreBase(BaseModel):
 
 class StoreCreate(StoreBase):
     """Esquema para crear una nueva tienda"""
-    pass
+    owner_id: UUID4 = Field(..., description="ID del usuario que será el dueño de la tienda")
 
 class StoreUpdate(BaseModel):
     """Esquema para actualizar una tienda existente"""

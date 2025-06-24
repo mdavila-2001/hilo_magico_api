@@ -18,40 +18,63 @@ class StoreService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def create_store(self, store_in: StoreCreate, owner_id: UUID) -> StoreInDB:
+    async def create_store(self, store_in: StoreCreate) -> StoreInDB:
         """
-        Crea una nueva tienda.
+        Crea una nueva tienda y asigna el dueño.
         
         Args:
-            store_in: Datos de la tienda a crear
-            owner_id: ID del usuario que será el propietario
+            store_in: Datos de la tienda a crear, incluyendo el owner_id
             
         Returns:
             StoreInDB con los datos de la tienda creada
             
         Raises:
-            DatabaseException: Si ocurre un error al crear la tienda
+            DatabaseException: Si ocurre un error al crear la tienda o asignar el dueño
         """
+        from app.models.user_store_association import UserStoreAssociation
+        from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+        
         try:
-            # Crear la tienda
-            db_store = Store(
-                **store_in.dict(exclude_unset=True)
-            )
-            self.db.add(db_store)
+            # Extraer el owner_id del store_in
+            store_data = store_in.dict(exclude_unset=True)
+            owner_id = store_data.pop('owner_id')
             
-            # TODO: Asignar el owner a la tienda en la tabla user_stores
-            # Esto debería manejarse en una transacción separada
-            
-            await self.db.commit()
+            # Iniciar transacción
+            async with self.db.begin():
+                # Crear la tienda
+                db_store = Store(**store_data)
+                self.db.add(db_store)
+                await self.db.flush()  # Para obtener el ID de la tienda
+                
+                # Crear la relación con el dueño
+                user_store = UserStoreAssociation(
+                    user_id=owner_id,
+                    store_id=db_store.id,
+                    role='owner',
+                    is_active=True
+                )
+                self.db.add(user_store)
+                
+                # No es necesario commit explícito con el contexto de transacción
+                
+            # Obtener la tienda con todos sus datos
             await self.db.refresh(db_store)
-            
-            logger.info(f"Tienda creada exitosamente: {db_store.id}")
+            logger.info(f"Tienda creada exitosamente: {db_store.id} con dueño {owner_id}")
             return StoreInDB.from_orm(db_store)
+                
+        except IntegrityError as e:
+            logger.error(f"Error de integridad al crear tienda: {str(e)}")
+            if 'duplicate key' in str(e).lower():
+                raise DatabaseException("Ya existe una tienda con los mismos datos")
+            raise DatabaseException("Error de integridad al crear la tienda")
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Error de base de datos al crear tienda: {str(e)}")
+            raise DatabaseException("Error al guardar la tienda en la base de datos")
             
         except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error al crear tienda: {str(e)}")
-            raise DatabaseException(f"No se pudo crear la tienda: {str(e)}")
+            logger.error(f"Error inesperado al crear tienda: {str(e)}")
+            raise DatabaseException("Error inesperado al crear la tienda: {str(e)}")
     
     async def get_store(self, store_id: UUID) -> Optional[StoreInDB]:
         """
