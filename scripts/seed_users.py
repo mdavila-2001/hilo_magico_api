@@ -3,13 +3,20 @@ Script para poblar la base de datos con usuarios de prueba.
 
 Este script crea varios usuarios con diferentes roles para propósitos de desarrollo y pruebas.
 """
+import os
 import sys
 import uuid
+from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any
 
 # Agregar el directorio raíz al path para poder importar los módulos de la aplicación
-sys.path.insert(0, str('c:/NUR/Semestre III/Comercio Electrónico/hilo_magico_api'))
+root_dir = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(root_dir))
+
+# Configurar variables de entorno
+from dotenv import load_dotenv
+load_dotenv()
 
 import asyncio
 from sqlalchemy import text, select
