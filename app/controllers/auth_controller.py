@@ -61,6 +61,9 @@ class AuthController:
             data={"sub": str(user.id)}
         )
 
+        # Obtener el rol del usuario para el mensaje
+        user_role = user.role.value if hasattr(user.role, 'value') else user.role
+        
         return APIResponse[Token].create_success(
             data=Token(
                 access_token=access_token,
@@ -68,7 +71,7 @@ class AuthController:
                 refresh_token=refresh_token,
                 expires_at=datetime.utcnow() + access_token_expires
             ),
-            message="Inicio de sesión exitoso"
+            message=f"Inicio de sesión exitoso como {user_role}"
         )
 
     async def refresh_token(self, refresh_token: str) -> APIResponse[Token]:
