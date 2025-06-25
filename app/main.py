@@ -13,7 +13,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 # Importar routers
-from app.api.v1.routes import users, stores, auth, products
+from app.api.v1.routes import users, stores, auth, products, orders
 
 def create_application() -> FastAPI:
     # Crear aplicación FastAPI
@@ -88,6 +88,13 @@ def create_application() -> FastAPI:
         products.router,
         prefix="/api/v1/products",
         tags=["Productos"],
+        dependencies=[Depends(get_current_active_user)]
+    )
+    
+    app.include_router(
+        orders.router,
+        prefix="/api/v1/orders",
+        tags=["Órdenes"],
         dependencies=[Depends(get_current_active_user)]
     )
     

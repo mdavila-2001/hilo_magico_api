@@ -284,9 +284,29 @@ def get_current_admin_user(
     return check_user_permissions(required_roles=["admin", "superuser"], current_user=current_user)
 
 
+def get_current_seller_user(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Verifica que el usuario actual sea un vendedor.
+    
+    Args:
+        current_user: Usuario actual obtenido del token JWT.
+        
+    Returns:
+        User: El usuario actual si es vendedor.
+        
+    Raises:
+        ForbiddenException: Si el usuario no tiene rol de vendedor.
+    """
+    if current_user.role != "seller" and not current_user.is_superuser:
+        raise ForbiddenException("El usuario no tiene permisos de vendedor")
+    return current_user
+
+
 def get_current_superuser(
     current_user: User = Depends(get_current_active_user)
-) -> User:
+):
     """
     Verifica que el usuario actual sea un superusuario.
     
@@ -299,4 +319,6 @@ def get_current_superuser(
     Raises:
         ForbiddenException: Si el usuario no es superusuario.
     """
-    return check_user_permissions(required_roles=["superuser"], current_user=current_user)
+    if not current_user.is_superuser:
+        raise ForbiddenException("El usuario no tiene permisos de superusuario")
+    return current_user
