@@ -382,12 +382,12 @@ async def delete_store(
             raise NotFoundException("Tienda no encontrada")
         
         # Verificar permisos
-        user_role = current_user.get("role")
+        user_role = current_user.role
         
         # Solo el propietario o un administrador pueden eliminar la tienda
-        if user_role not in [UserRole.ADMIN, UserRole.SUPERUSER]:
+        if user_role != UserRole.ADMIN:  # Si no es administrador
             user_store_service = UserStoreService(db)
-            user_store_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
+            user_store_role = await user_store_service.get_user_role_in_store(store_id, current_user.id)
             
             if user_store_role != UserRole.OWNER:
                 raise ForbiddenException("Solo el propietario puede eliminar esta tienda")
