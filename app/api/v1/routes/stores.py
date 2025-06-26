@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 import logging
+from app.schemas.user import UserRole
 
 from app.db.session import get_db
 from app.schemas.store import (
@@ -61,7 +62,7 @@ async def get_store_owner(store_id: UUID, db: AsyncSession = Depends(get_db), cu
 async def create_store(
     store_in: StoreCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ) -> StoreResponse:
     """
     Crea una nueva tienda en el sistema con un dueño específico.
@@ -81,9 +82,9 @@ async def create_store(
         store_service = StoreService(db)
         
         # Verificar permisos
-        if current_user["role"] not in ["admin", "superadmin"]:
+        if current_user.role not in [UserRole.ADMIN, UserRole.OWNER]:
             # Usuarios normales solo pueden crearse tiendas a sí mismos
-            if str(store_in.owner_id) != str(current_user["id"]):
+            if str(store_in.owner_id) != str(current_user.id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Solo puede crearse tiendas a sí mismo"
@@ -298,17 +299,25 @@ async def update_store(
             raise NotFoundException("Tienda no encontrada")
         
         # Verificar permisos
-        user_role = current_user.get("role")
-        user_store_role = await user_store_service.get_user_role_in_store(store_id, current_user["id"])
+        user_role = current_user.role
+        user_store_role = await user_store_service.get_user_role_in_store(store_id, current_user.id)
         
-        # Si no es admin, verificar permisos específicos
-        if user_role not in [UserRole.ADMIN, UserRole.SUPERUSER]:
-            if not user_store_role:
-                raise ForbiddenException("No tiene permisos para actualizar esta tienda")
+        # Si el usuario es administrador, puede actualizar cualquier tienda
+        if user_role == UserRole.ADMIN:
+            pass  # Los administradores pueden actualizar cualquier campo
             
-            # Si es vendedor, solo puede actualizar ciertos campos
-            if user_store_role == UserRole.SELLER:
-                update_data = store_in.dict(exclude_unset=True)
+        # Si no es administrador, verificar permisos específicos
+        else:
+            # Verificar si el usuario es propietario de la tienda
+            is_owner = user_store_role == UserRole.OWNER
+            
+            # Si no es ni administrador ni propietario, verificar si es vendedor
+            if not is_owner:
+                if user_store_role != UserRole.SELLER:
+                    raise ForbiddenException("No tiene permisos para actualizar esta tienda")
+                
+                # Si es vendedor, solo puede actualizar ciertos campos
+                update_data = store_in.model_dump(exclude_unset=True)
                 allowed_fields = ["description", "phone", "email"]
                 if any(field not in allowed_fields for field in update_data.keys()):
                     raise ForbiddenException("Solo puede actualizar la descripción, teléfono y correo")

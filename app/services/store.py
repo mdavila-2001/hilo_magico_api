@@ -2,7 +2,7 @@ from typing import List, Optional, Any, Dict
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from sqlalchemy.sql.expression import text
 import logging
 
@@ -39,28 +39,29 @@ class StoreService:
             store_data = store_in.dict(exclude_unset=True)
             owner_id = store_data.pop('owner_id')
             
-            # Iniciar transacción
-            async with self.db.begin():
-                # Crear la tienda
-                db_store = Store(**store_data)
-                self.db.add(db_store)
-                await self.db.flush()  # Para obtener el ID de la tienda
-                
-                # Crear la relación con el dueño
-                user_store = UserStoreAssociation(
-                    user_id=owner_id,
-                    store_id=db_store.id,
-                    role='owner',
-                    is_active=True
-                )
-                self.db.add(user_store)
-                
-                # No es necesario commit explícito con el contexto de transacción
-                
-            # Obtener la tienda con todos sus datos
+            # Crear la tienda
+            db_store = Store(**store_data)
+            self.db.add(db_store)
+            await self.db.flush()  # Para obtener el ID de la tienda
+            
+            # Crear la relación con el dueño
+            from app.schemas.user import UserRole
+            user_store = UserStoreAssociation(
+                user_id=owner_id,
+                store_id=db_store.id,
+                role=UserRole.OWNER,  # Usar el enum UserRole.OWNER
+                is_active=True
+            )
+            self.db.add(user_store)
+            
+            # Hacer commit de los cambios
+            await self.db.commit()
             await self.db.refresh(db_store)
             logger.info(f"Tienda creada exitosamente: {db_store.id} con dueño {owner_id}")
-            return StoreInDB.from_orm(db_store)
+            
+            # Convertir el modelo SQLAlchemy a diccionario y luego a StoreInDB
+            store_dict = {c.name: getattr(db_store, c.name) for c in db_store.__table__.columns}
+            return StoreInDB(**store_dict)
                 
         except IntegrityError as e:
             logger.error(f"Error de integridad al crear tienda: {str(e)}")
@@ -132,7 +133,7 @@ class StoreService:
         """
         try:
             # Construir consulta base para conteo (sin paginación)
-            count_query = select([func.count()]).select_from(Store).where(Store.deleted_at.is_(None))
+            count_query = select(func.count()).select_from(Store).where(Store.deleted_at.is_(None))
             
             # Construir consulta principal
             query = select(Store).where(Store.deleted_at.is_(None))

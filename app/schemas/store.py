@@ -34,7 +34,7 @@ class StoreInDB(StoreBase):
     """Esquema para representar una tienda en la base de datos"""
     id: UUID4 = Field(..., description="Identificador único de la tienda")
     created_at: datetime = Field(..., description="Fecha de creación del registro")
-    updated_at: datetime = Field(..., description="Fecha de última actualización")
+    updated_at: Optional[datetime] = Field(None, description="Fecha de última actualización")
     deleted_at: Optional[datetime] = Field(None, description="Fecha de eliminación lógica")
 
     class Config:

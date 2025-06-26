@@ -248,12 +248,29 @@ def check_user_permissions(
     if required_roles is None:
         required_roles = ["user"]  # Por defecto, cualquier usuario autenticado
         
+    from app.schemas.user import UserRole
+    
     # Si el usuario es superadmin, tiene acceso a todo
-    if current_user.role == "superuser":
+    if current_user.role == UserRole.ADMIN:  # Asumiendo que ADMIN=1 es el superadmin
         return current_user
         
+    # Convertir los roles requeridos a enteros si son strings
+    required_roles_int = []
+    for role in required_roles:
+        if isinstance(role, str):
+            # Si es string, obtener el valor del enum
+            try:
+                role_enum = getattr(UserRole, role.upper())
+                required_roles_int.append(role_enum)
+            except AttributeError:
+                # Si no existe el rol, lo ignoramos
+                continue
+        else:
+            # Si ya es un entero, usarlo directamente
+            required_roles_int.append(role)
+    
     # Verificar si el rol del usuario está en los roles requeridos
-    if current_user.role not in required_roles:
+    if current_user.role not in required_roles_int:
         logger.warning(
             f"Intento de acceso no autorizado. "
             f"Usuario: {current_user.email}, Rol: {current_user.role}, "
@@ -281,7 +298,9 @@ def get_current_admin_user(
     Raises:
         ForbiddenException: Si el usuario no es administrador.
     """
-    return check_user_permissions(required_roles=["admin", "superuser"], current_user=current_user)
+    from app.schemas.user import UserRole
+    # ADMIN = 1, OWNER = 2 pueden tener acceso a funciones de administrador
+    return check_user_permissions(required_roles=[UserRole.ADMIN, UserRole.OWNER], current_user=current_user)
 
 
 def get_current_seller_user(
