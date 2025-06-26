@@ -5,6 +5,18 @@ from pydantic.types import UUID4
 
 from app.schemas.response import APIResponse
 
+class UserInfo(BaseModel):
+    """Modelo para la información básica del usuario en la respuesta de autenticación."""
+    id: str = Field(..., description="ID único del usuario")
+    email: str = Field(..., description="Correo electrónico del usuario")
+    first_name: Optional[str] = Field(None, description="Nombre del usuario")
+    middle_name: Optional[str] = Field(None, description="Segundo nombre del usuario")
+    last_name: Optional[str] = Field(None, description="Apellido del usuario")
+    mother_last_name: Optional[str] = Field(None, description="Apellido materno del usuario")
+    role: str = Field(..., description="Rol del usuario (admin, seller, customer, etc.)")
+    is_active: bool = Field(..., description="Indica si el usuario está activo")
+
+
 class Token(BaseModel):
     """Modelo para la respuesta de autenticación con tokens JWT."""
     access_token: str = Field(..., description="Token de acceso JWT para autenticación")
@@ -17,6 +29,7 @@ class Token(BaseModel):
         None,
         description="Fecha y hora de expiración del token de acceso"
     )
+    user: UserInfo = Field(..., description="Información básica del usuario autenticado")
 
     class Config:
         json_schema_extra = {
@@ -24,7 +37,17 @@ class Token(BaseModel):
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "bearer",
                 "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                "expires_at": "2025-06-04T15:30:00.000Z"
+                "expires_at": "2025-06-04T15:30:00.000Z",
+                "user": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "email": "usuario@ejemplo.com",
+                    "first_name": "Juan",
+                    "middle_name": "Daniel",
+                    "last_name": "Pérez",
+                    "mother_last_name": "García",
+                    "role": 1,
+                    "is_active": True
+                }
             }
         }
 

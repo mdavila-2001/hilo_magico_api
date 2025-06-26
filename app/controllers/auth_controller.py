@@ -52,6 +52,8 @@ class AuthController:
 
         # Crear tokens
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_at = datetime.utcnow() + access_token_expires
+        
         access_token = create_access_token(
             data={"sub": str(user.id)},
             expires_delta=access_token_expires
@@ -60,18 +62,44 @@ class AuthController:
         refresh_token = create_refresh_token(
             data={"sub": str(user.id)}
         )
-
-        # Obtener el rol del usuario para el mensaje
-        user_role = user.role.value if hasattr(user.role, 'value') else user.role
         
+        # Obtener el nombre del rol
+        from app.models.user import UserRole  # Asegúrate de importar UserRole
+        
+        # Si el rol es un entero, convertirlo a su representación de cadena
+        if isinstance(user.role, int):
+            try:
+                role_name = UserRole(user.role).name.lower()
+            except ValueError:
+                role_name = str(user.role)
+        elif hasattr(user.role, 'value'):
+            # Si es un enum, obtener su valor
+            role_name = user.role.value
+        else:
+            # Si ya es un string, usarlo directamente
+            role_name = str(user.role)
+            
+        # Crear objeto de información del usuario
+        user_info = {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "middle_name": user.middle_name,
+            "last_name": user.last_name,
+            "mother_last_name": user.mother_last_name,
+            "role": role_name,
+            "is_active": user.is_active
+        }
+
         return APIResponse[Token].create_success(
             data=Token(
                 access_token=access_token,
                 token_type="bearer",
                 refresh_token=refresh_token,
-                expires_at=datetime.utcnow() + access_token_expires
+                expires_at=expires_at,
+                user=user_info
             ),
-            message=f"Inicio de sesión exitoso como {user_role}"
+            message=f"Inicio de sesión exitoso"
         )
 
     async def refresh_token(self, refresh_token: str) -> APIResponse[Token]:

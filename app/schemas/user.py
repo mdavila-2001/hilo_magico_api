@@ -145,9 +145,18 @@ class UserOut(BaseModel):
             
             # Asegurar que el rol sea string
             if 'role' in values:
-                if hasattr(values['role'], 'value'):
-                    values['role'] = values['role'].value
-                values['role'] = str(values['role'])
+                role = values['role']
+                # Si es un enum, obtener su valor
+                if hasattr(role, 'value'):
+                    role = role.value
+                # Si es un entero, obtener el nombre del enum correspondiente
+                if isinstance(role, int):
+                    try:
+                        role = UserRole(role).name.lower()
+                    except ValueError:
+                        role = str(role)
+                # Asegurar que sea string
+                values['role'] = str(role)
                 
             # Asegurar que las fechas sean strings
             if 'created_at' in values and isinstance(values['created_at'], datetime):
