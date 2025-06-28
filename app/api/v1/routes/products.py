@@ -51,7 +51,7 @@ def check_store_owner_or_admin(
         HTTPException: Si el usuario no tiene permisos
     """
     # Superusuarios y administradores tienen acceso completo
-    if current_user.role in [UserRole.SUPERUSER, UserRole.ADMIN]:
+    if current_user.role in [UserRole.ADMIN]:
         return True
         
     # Dueños pueden acceder a sus propias tiendas

@@ -23,8 +23,9 @@ class Product(Base):
     updated_at = Column(DateTime, onupdate=func.now())
     deleted_at = Column(DateTime, nullable=True)
     
-    # Clave foránea
+    # Claves foráneas
     store_id = Column(UUID(as_uuid=True), ForeignKey('development.stores.id'), nullable=False, index=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey('development.users.id'), nullable=True, index=True)
 
     # Relaciones comentadas temporalmente para simplificar
     # store = relationship('Store', back_populates='products')
@@ -43,6 +44,7 @@ class Product(Base):
             'stock': self.stock,
             'is_active': self.is_active,
             'store_id': str(self.store_id),
+            'created_by': str(self.created_by) if self.created_by else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None
