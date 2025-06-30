@@ -23,6 +23,7 @@ from app.models.user import User
 
 # Importar servicios
 from app.services.product_service import ProductService
+from app.services.file_service import file_service
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -326,6 +327,35 @@ async def delete_product(
 # ==============================================
 # ENDPOINTS PARA GESTIÓN DE IMÁGENES
 # ==============================================
+
+@router.post("/test-upload/", status_code=200)
+async def test_upload_image(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint de prueba para subir una imagen.
+    
+    - **file**: Archivo de imagen a subir (obligatorio)
+    """
+    try:
+        # Guardar el archivo usando el servicio
+        file_path = await file_service.save_upload_file(file, "test")
+        
+        return {
+            "success": True,
+            "message": "Archivo subido exitosamente",
+            "file_path": file_path
+        }
+        
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error al subir archivo de prueba: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al procesar el archivo: {str(e)}"
+        )
 
 @router.post(
     "/{product_id}/upload-image",
