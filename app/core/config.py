@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     REDOC_URL: str = "/redoc"
     OPENAPI_URL: str = "/openapi.json"
     
+    # File Upload Settings
+    UPLOAD_DIR: str = "static/uploads"
+    ALLOWED_EXTENSIONS: str = "png,jpg,jpeg,gif,webp"
+    MAX_FILE_SIZE: int = 5  # MB
+    
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

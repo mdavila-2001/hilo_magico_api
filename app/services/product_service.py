@@ -1,12 +1,14 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy import select, update, delete, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from fastapi import UploadFile, HTTPException
 
 from app.models.product import Product as ProductModel
 from app.schemas.product import ProductCreate, ProductUpdate, ProductInDB
+from app.services.file_service import file_service
 from app.core.logging_config import logger
 
 class ProductService:
@@ -87,11 +89,63 @@ class ProductService:
             raise
     
     @classmethod
+    async def upload_product_image(
+        cls,
+        file: UploadFile,
+        product_id: UUID,
+        db: AsyncSession
+    ) -> str:
+        """
+        Sube una imagen para un producto existente.
+        
+        Args:
+            file: Archivo de imagen a subir
+            product_id: ID del producto al que se asociará la imagen
+            db: Sesión de base de datos
+            
+        Returns:
+            str: URL de la imagen subida
+            
+        Raises:
+            HTTPException: Si el producto no existe o hay un error al subir la imagen
+        """
+        try:
+            # Verificar que el producto exista
+            product = await cls.get_product_by_id(db, product_id)
+            if not product:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Producto con ID {product_id} no encontrado"
+                )
+            
+            # Subir la imagen
+            image_url = await file_service.save_upload_file(file, "products")
+            
+            # Actualizar el producto con la URL de la imagen
+            update_data = {"image_url": image_url}
+            await cls.update_product(
+                db=db,
+                product_id=product_id,
+                product_data=ProductUpdate(**update_data),
+                updated_by=UUID("00000000-0000-0000-0000-000000000000")  # Usar un UUID por defecto
+            )
+            
+            return image_url
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error al subir imagen para producto {product_id}: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al subir la imagen: {str(e)}"
+            )
+    
+    @classmethod
     async def create_product(
         cls, 
         db: AsyncSession, 
-        product_data: ProductCreate,
-        created_by: UUID
+        product_data: ProductCreate
     ) -> ProductInDB:
         """
         Crea un nuevo producto.
@@ -99,17 +153,13 @@ class ProductService:
         Args:
             db: Sesión de base de datos asíncrona
             product_data: Datos del producto a crear
-            created_by: ID del usuario que crea el producto
             
         Returns:
             El producto creado
         """
         try:
             # Crear instancia del modelo
-            db_product = ProductModel(
-                **product_data.dict(),
-                created_by=created_by
-            )
+            db_product = ProductModel(**product_data.dict())
             
             # Agregar a la sesión
             db.add(db_product)

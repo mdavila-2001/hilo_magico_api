@@ -19,6 +19,7 @@ class Product(Base):
     price = Column(Float, nullable=False)
     stock = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    image_url = Column(String(500), nullable=True)  # URL de la imagen del producto
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     deleted_at = Column(DateTime, nullable=True)

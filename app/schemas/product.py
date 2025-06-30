@@ -12,6 +12,7 @@ class ProductBase(BaseModel):
     stock: int = Field(0, ge=0, description="Cantidad disponible en inventario")
     is_active: bool = Field(True, description="Indica si el producto está activo")
     store_id: PyUUID = Field(..., description="ID de la tienda a la que pertenece el producto")
+    image_url: Optional[str] = Field(None, max_length=500, description="URL de la imagen del producto")
 
     @validator('price')
     def price_must_be_positive(cls, v):
@@ -37,6 +38,7 @@ class ProductUpdate(BaseModel):
     price: Optional[float] = Field(None, gt=0, description="Nuevo precio (debe ser mayor a 0)")
     stock: Optional[int] = Field(None, ge=0, description="Nuevo stock disponible")
     is_active: Optional[bool] = Field(None, description="Estado de activación del producto")
+    image_url: Optional[str] = Field(None, description="URL de la imagen del producto")
 
     @validator('price')
     def price_must_be_positive(cls, v):

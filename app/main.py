@@ -1,8 +1,10 @@
 import logging
+import os
 from fastapi import FastAPI, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 
 # Importar configuración
 from app.core.config import settings
@@ -66,9 +68,13 @@ def create_application() -> FastAPI:
     from app.core.security import get_current_active_user, check_user_permissions
     from app.models.user import UserRole
 
-    # Incluir routers
+    # Configurar archivos estáticos
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=settings.UPLOAD_DIR), name="static")
+
+    # Incluir router de autenticación (público)
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticación"])
-    
+
     # Rutas protegidas que requieren autenticación
     app.include_router(
         users.router,

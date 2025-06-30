@@ -1,6 +1,6 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -185,8 +185,7 @@ async def create_product(
         # Crear el producto
         product = await ProductService.create_product(
             db=db,
-            product_data=product_data,
-            created_by=current_user.id
+            product_data=product_data
         )
         
         return APIResponse(
@@ -322,6 +321,66 @@ async def delete_product(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al eliminar el producto"
+        )
+
+# ==============================================
+# ENDPOINTS PARA GESTIÓN DE IMÁGENES
+# ==============================================
+
+@router.post(
+    "/{product_id}/upload-image",
+    response_model=APIResponse[str],
+    status_code=status.HTTP_200_OK,
+    summary="Subir imagen de producto",
+    description="Sube una imagen para un producto existente"
+)
+async def upload_product_image(
+    product_id: UUID,
+    file: UploadFile = File(..., description="Archivo de imagen a subir"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Sube una imagen para un producto existente.
+    
+    Formatos soportados: PNG, JPG, JPEG, GIF, WEBP
+    Tamaño máximo: 5MB
+    
+    - **file**: Archivo de imagen a subir (obligatorio)
+    """
+    try:
+        # Verificar permisos
+        product = await ProductService.get_product_by_id(db, product_id)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Producto con ID {product_id} no encontrado"
+            )
+            
+        # Verificar que el usuario tenga permisos sobre la tienda del producto
+        check_store_owner_or_admin(current_user, store_id=product.store_id)
+        
+        # Subir la imagen
+        image_url = await ProductService.upload_product_image(
+            file=file,
+            product_id=product_id,
+            db=db
+        )
+        
+        return APIResponse(
+            success=True,
+            message="Imagen subida exitosamente",
+            data=image_url,
+            status_code=status.HTTP_200_OK
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error al subir imagen para producto {product_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir la imagen: {str(e)}"
         )
 
 # ==============================================
