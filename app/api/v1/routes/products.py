@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-# Importar esquemas
+# Importación de esquemas
 from app.schemas.product import Product, ProductCreate, ProductUpdate, ProductInDB
 from app.schemas.response import APIResponse
 from app.schemas.user import UserRole
